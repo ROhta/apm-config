@@ -1,0 +1,14 @@
+name: apm-config-base
+version: 1.0.0
+description: ROhta 全リポジトリ共通の AI エージェント指示（言語・PR レビュー）
+author: ROhta
+license: GPL-3.0-or-later
+type: instructions
+targets:
+  - claude
+  - codex
+  - copilot
+includes: auto
+dependencies:
+  apm: []
+  mcp: []
