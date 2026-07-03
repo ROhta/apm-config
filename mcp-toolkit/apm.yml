@@ -1,6 +1,6 @@
 name: apm-config-mcp-toolkit
 version: 1.0.0
-description: 共通 MCP サーバーセット（context7 / semgrep / serena / chrome-devtools）の pin 一元管理
+description: 共通開発ツール MCP（context7 / semgrep / serena / chrome-devtools）を marketplace プラグインとして一元 pin
 author: ROhta
 license: GPL-3.0-or-later
 type: instructions
@@ -10,34 +10,17 @@ targets:
   - copilot
 includes: auto
 dependencies:
-  apm: []
-  mcp:
-    - name: context7
-      registry: false
-      transport: stdio
-      command: npx
-      args:
-        - -y
-        - "@upstash/context7-mcp@3.2.0"
-    - name: semgrep
-      registry: false
-      transport: stdio
-      command: uvx
-      args:
-        - semgrep-mcp
-    - name: serena
-      registry: false
-      transport: stdio
-      command: uvx
-      args:
-        - --from
-        - git+https://github.com/oraios/serena@acee002dc498e5f4c368eb9d45ab67e480d77832
-        - serena
-        - start-mcp-server
-    - name: chrome-devtools
-      registry: false
-      transport: stdio
-      command: npx
-      args:
-        - -y
-        - chrome-devtools-mcp@1.2.0
+  apm:
+    # --- anthropics/claude-plugins-official 同梱プラグイン（pin = marketplace リポジトリの SHA）---
+    # 注意: 両プラグインの manifest は MCP サーバー本体のバージョンを pin していない
+    #   context7: npx -y @upstash/context7-mcp（起動ごとに latest）
+    #   serena:   uvx --from git+https://github.com/oraios/serena（main HEAD 追従）
+    - anthropics/claude-plugins-official/external_plugins/context7#f3f92ab0303fbcc6f38a6e82d02c006311f9c557
+    - anthropics/claude-plugins-official/external_plugins/serena#f3f92ab0303fbcc6f38a6e82d02c006311f9c557
+    # --- 上流リポジトリ自体がプラグイン形式のもの ---
+    # chrome-devtools はプラグイン側が MCP 本体を pin（この SHA 時点で chrome-devtools-mcp@1.5.0）
+    - ChromeDevTools/chrome-devtools-mcp#913308263bdc8042af74924b68dc39a374ad071d
+    # semgrep: MCP 定義が ${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh 依存。
+    # Claude Code 以外のクライアント（codex / copilot）では動かない可能性が高い
+    - semgrep/mcp-marketplace/plugin#8e652ba6f586bb20377a72792c402c5a85a9b284
+  mcp: []
