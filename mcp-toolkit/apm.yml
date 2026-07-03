@@ -1,0 +1,43 @@
+name: apm-config-mcp-toolkit
+version: 1.0.0
+description: 共通 MCP サーバーセット（context7 / semgrep / serena / chrome-devtools）の pin 一元管理
+author: ROhta
+license: GPL-3.0-or-later
+type: instructions
+targets:
+  - claude
+  - codex
+  - copilot
+includes: auto
+dependencies:
+  apm: []
+  mcp:
+    - name: context7
+      registry: false
+      transport: stdio
+      command: npx
+      args:
+        - -y
+        - "@upstash/context7-mcp@3.2.0"
+    - name: semgrep
+      registry: false
+      transport: stdio
+      command: uvx
+      args:
+        - semgrep-mcp
+    - name: serena
+      registry: false
+      transport: stdio
+      command: uvx
+      args:
+        - --from
+        - git+https://github.com/oraios/serena@acee002dc498e5f4c368eb9d45ab67e480d77832
+        - serena
+        - start-mcp-server
+    - name: chrome-devtools
+      registry: false
+      transport: stdio
+      command: npx
+      args:
+        - -y
+        - chrome-devtools-mcp@1.2.0
