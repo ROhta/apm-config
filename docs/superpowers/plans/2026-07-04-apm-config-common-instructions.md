@@ -860,17 +860,20 @@ dependencies:
   mcp: []
 YML
   ( cd "$TMP" && apm install )
-  ( cd "$TMP" && grep -rl 'speckit-specify' .claude/rules/ .github/instructions/ 2>/dev/null ) \
-    && echo "speckit 実配信 OK" || echo "NG: speckit の配信物が見つからない"
-  ( cd "$TMP" && grep -rl 'ローカル開発ワークフロー' .claude/rules/ .github/instructions/ 2>/dev/null ) \
-    && echo "base(local-dev-workflow) 実配信 OK" || echo "NG: base 配信物が見つからない"
+  # 判定は本文の文言ではなく「配信されたファイル名」で行う。ファイル名はパッケージ契約
+  # （ソースファイル名由来）で安定するため、instructions 本文を微修正しても偽陰性にならない。
+  # 配信先: .claude/rules/<name>.md（.instructions 除去）/ .github/instructions/<name>.instructions.md
+  ( cd "$TMP" && find .claude .github -name 'speckit-workflow*' 2>/dev/null | grep -q . ) \
+    && echo "speckit 実配信 OK（speckit-workflow が展開された）" || echo "NG: speckit の配信物が見つからない"
+  ( cd "$TMP" && find .claude .github -name 'local-dev-workflow*' 2>/dev/null | grep -q . ) \
+    && echo "base 実配信 OK（local-dev-workflow が展開された）" || echo "NG: base 配信物が見つからない"
   rm -rf "$TMP"
 else
   echo "apm 未導入のためフェーズ 1 スモークをスキップ。この場合 speckit の初回実配信検証はフェーズ 3 (wine_record) が初出になる点に注意（base/mcp-toolkit はフェーズ 2 bingo で検証される）。"
 fi
 ```
 
-期待: apm があれば `speckit 実配信 OK` と `base(local-dev-workflow) 実配信 OK`。`NG:` が出たら subpath 解決・frontmatter・`includes: auto` を疑う。apm 未導入ならスキップ理由が表示される。
+期待: apm があれば `speckit 実配信 OK（…）` と `base 実配信 OK（…）` の 2 行。`NG:` が出たら subpath 解決・frontmatter・`includes: auto`、または配信先パス命名を疑う。apm 未導入ならスキップ理由が表示される。
 
 - [ ] **Step 5: PR を作成**
 
