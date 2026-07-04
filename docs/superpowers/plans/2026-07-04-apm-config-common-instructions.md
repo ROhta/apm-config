@@ -27,12 +27,25 @@
 
 ## 事前準備
 
-- [ ] **Step 0: 実装ブランチを作成**
+- [ ] **Step 0: 実装ブランチを作成（計画ファイルがツリーに存在する起点から切る）**
+
+この計画ファイルは spec と同じブランチ `docs/instructions-migration-design`（PR #8、未マージ）にしか存在しない。subagent 駆動実行は `docs/superpowers/plans/...` を読むため、計画ファイルが disk にある起点から分岐する必要がある。
+
+**推奨**: PR #8（spec + plan、docs のみ）を先に main へマージしてから main を起点にする。consumer フェーズが依存するのは本 PR ではなく**実装 PR** のマージ SHA なので、PR #8 を先にマージしても後続に悪影響はない。
 
 ```bash
 cd /home/ore/codes/apm-config
 git fetch origin
-git switch main && git pull --ff-only
+git switch main && git pull --ff-only          # PR #8 マージ後の main を取得（計画ファイルを含む）
+git switch -c feat/common-instructions-packages
+```
+
+**フォールバック**（PR #8 をまだマージしたくない場合）: 計画ファイルを含む PR #8 のブランチを起点にする。ただし実装 PR に spec/plan コミットが混ざる点に注意。
+
+```bash
+cd /home/ore/codes/apm-config
+git fetch origin
+git switch docs/instructions-migration-design && git pull --ff-only
 git switch -c feat/common-instructions-packages
 ```
 
@@ -805,16 +818,7 @@ grep -qx 'version: 1.1.0' base/apm.yml && grep -qx 'version: 1.1.0' mcp-toolkit/
 
 期待: `base 6 files OK` / `mcp-toolkit 1 file OK` / `speckit 1 file OK` / `frontmatter 走査 完了`（NG 行が出ないこと）/ `versions OK`。
 
-- [ ] **Step 2: apm.yml が YAML として妥当か（apm が利用可能な場合）**
-
-```bash
-cd /home/ore/codes/apm-config
-if command -v apm >/dev/null 2>&1; then apm --version; else echo "apm 未導入: YAML 構造は grep アサーション済み。実 install はフェーズ 2 (bingo) で確認する"; fi
-```
-
-期待: apm があればバージョン表示。無ければスキップ理由が表示される（このタスクは apm 導入を前提にしない）。
-
-- [ ] **Step 3: README.md の構成表に speckit を追記**
+- [ ] **Step 2: README.md の構成表に speckit を追記**
 
 `README.md` の「構成（レイヤー別サブパッケージ）」の表に、`mcp-toolkit/` 行の下へ次の行を追加する。
 
@@ -822,18 +826,56 @@ if command -v apm >/dev/null 2>&1; then apm --version; else echo "apm 未導入:
 | `speckit/` | Spec Kit 機能開発フローと Spec Kit × APM 連携の instructions | Spec Kit を使うリポジトリ |
 ```
 
-- [ ] **Step 4: コミット**
+- [ ] **Step 3: README のコミットとブランチ push**
+
+push しておくと、次の Step 4 で subpath パッケージを `#<sha>` 参照で解決できる。
 
 ```bash
 git add README.md
 git commit -m "docs(readme): 構成表に speckit サブパッケージを追記"
+git push -u origin feat/common-instructions-packages
 ```
 
-- [ ] **Step 5: push して PR を作成**
+- [ ] **Step 4: speckit パッケージの実配信スモークテスト（重要）**
+
+**なぜこのタスクにこのテストが要るか**: フェーズ 2（bingo）は base と mcp-toolkit を pull するため、base の新規 instructions と mcp-toolkit の新規 instructions 配信はそこで実 install 検証される。しかし **speckit を pull するのは wine_record（フェーズ 3）だけ**で、speckit は今回初めて作る subpath パッケージ。「新規 subpath パッケージが解決・配信されるか」という最もリスクの高い前提が、検証しないと最も複雑なリポジトリ（Spec Kit + 憲章）で初めて露見する。それをフェーズ 1 のうちに潰す。
+
+base は既存で実績があり、mcp-toolkit はフェーズ 2 で検証されるため、ここでは **base + speckit**（どちらも instruction のみで MCP ランタイム依存なし＝高速・堅牢）を使い分け捨てディレクトリへ実 install して配信を確認する。
 
 ```bash
 cd /home/ore/codes/apm-config
-git push -u origin feat/common-instructions-packages
+SHA=$(git rev-parse HEAD)
+if command -v apm >/dev/null 2>&1; then
+  TMP=$(mktemp -d)
+  cat > "$TMP/apm.yml" <<YML
+name: smoke-test
+version: 0.0.0
+type: instructions
+targets: [claude, codex, copilot]
+includes: auto
+dependencies:
+  apm:
+    - ROhta/apm-config/base#${SHA}
+    - ROhta/apm-config/speckit#${SHA}
+  mcp: []
+YML
+  ( cd "$TMP" && apm install )
+  ( cd "$TMP" && grep -rl 'speckit-specify' .claude/rules/ .github/instructions/ 2>/dev/null ) \
+    && echo "speckit 実配信 OK" || echo "NG: speckit の配信物が見つからない"
+  ( cd "$TMP" && grep -rl 'ローカル開発ワークフロー' .claude/rules/ .github/instructions/ 2>/dev/null ) \
+    && echo "base(local-dev-workflow) 実配信 OK" || echo "NG: base 配信物が見つからない"
+  rm -rf "$TMP"
+else
+  echo "apm 未導入のためフェーズ 1 スモークをスキップ。この場合 speckit の初回実配信検証はフェーズ 3 (wine_record) が初出になる点に注意（base/mcp-toolkit はフェーズ 2 bingo で検証される）。"
+fi
+```
+
+期待: apm があれば `speckit 実配信 OK` と `base(local-dev-workflow) 実配信 OK`。`NG:` が出たら subpath 解決・frontmatter・`includes: auto` を疑う。apm 未導入ならスキップ理由が表示される。
+
+- [ ] **Step 5: PR を作成**
+
+```bash
+cd /home/ore/codes/apm-config
 gh pr create --assignee @me --label enhancement \
   --title "feat: 共通 instructions を base/mcp-toolkit/speckit パッケージに整備" \
   --body "$(cat <<'BODY'
@@ -873,7 +915,7 @@ BODY
 - §4.1〜4.5 各ファイルの内容方針 → 各 Task の Step 1 全文 + Step 2 アサーション。✅
 - §4.4 統合版マッピング → Task 4。✅
 - §5 consumer 変更 / release.yml 統一 / apm 0.23.1 → **フェーズ 2〜5（別計画）**。本計画のスコープ外である旨を Architecture に明記。✅
-- §8 リスク（0.23.1 挙動）→ 実 install 検証をフェーズ 2 に委ねる旨を Task 7 Step 2 に記載。✅
+- §8 リスク（0.23.1 挙動）→ base/mcp-toolkit の実 install 検証はフェーズ 2（bingo）。speckit は初回消費がフェーズ 3 になり検証が遅れるため、Task 7 Step 4 でフェーズ 1 スモークテスト（base + speckit の実配信）を先行実施。✅
 
 **Placeholder scan:** 各ファイルは全文を記載。`<owner>` `<repo>` `<sha>` `<番号>` はテンプレート内のプレースホルダ（instructions の意図的な可変部）であり計画の欠落ではない。✅
 
