@@ -22,18 +22,20 @@ applyTo: "apm.yml"
 
 `dependencies.apm` には特定 AI ベンダー (anthropics 等) 組織配下のリポジトリを直接指定せず、コミュニティ curated marketplace (`github/awesome-copilot`) や中立 OSS 作者リポジトリ (`obra/superpowers`) を経由する。理由: ベンダー組織のプラグインは「そのベンダーのランタイム前提」 (例: Claude Code の Stop hook + subagent 機構) で書かれていることが多く、Codex などのターゲットに同等機能が配信されないため。
 
-## SHA ピン
+## バージョン固定（SHA ピン / lock）
 
-`dependencies.apm` のエントリは **必ず `#<sha>` でピンする**。`apm install` で `unpinned -- add #tag or #sha to prevent drift` という警告が出るため気付ける。
+`dependencies.apm` のエントリはバージョンを固定して、`apm install` 毎に上流 `main` を引いて各メンバーの開発体験が静かにドリフトするのを防ぐ。固定方法は参照先で使い分ける。
+
+- **外部サードパーティ（`obra/superpowers`, `github/awesome-copilot` 等）**: `#<sha>` で **必ずピンする**。ピンしないと `apm install` で `unpinned -- add #tag or #sha to prevent drift` の警告が出るため気付ける。
+- **apm-config 自身の共通パッケージ（`ROhta/apm-config/base` 等）**: `#main` 参照 + `apm.lock.yaml`（consumer 側でコミット）で解決済み SHA を固定する運用も可。lock が `apm update` を実行するまで内容を固定するため `#main` でもドリフトしない（apm-config README の推奨）。`#<sha>` 直接ピンでもよい。
 
 ```yaml
 dependencies:
   apm:
     - github/awesome-copilot/instructions/code-review-generic.instructions.md#5b049e4e196c10aab8ddfd9e492323d08cf985b0
     - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+    - ROhta/apm-config/base#main   # 共通パッケージは lock コミット運用なら #main 可
 ```
-
-理由: ピンしないと `apm install` 毎に上流の `main` を引いてしまい、各メンバーの開発体験が静かにドリフトする (ドリフト防止方針は apm-workflow ルールを参照)。
 
 ## プラグインの追加
 

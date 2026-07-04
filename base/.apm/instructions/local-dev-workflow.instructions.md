@@ -69,11 +69,11 @@ PR を新規作成、または既存ブランチに push した後、**ユーザ
 
 `gh api graphql` で未 resolve なレビュースレッドを列挙する (`gh pr view --json reviews,comments` は thread の `isResolved` を返さないので使わない)。owner / repo は `gh repo view --json nameWithOwner --jq .nameWithOwner` で動的に解決する。
 
-レビュースレッド数が 100 を、または各スレッドのコメント数が 50 を超える可能性がある場合は、`pageInfo { hasNextPage endCursor }` を取得し、`hasNextPage: true` の間は `after: $cursor` を渡してカーソル送りで全件取得する (下記は初回ページの取得例)。
+レビュースレッド数が 100 を超える場合は、`reviewThreads` の `pageInfo { hasNextPage endCursor }` を見て `hasNextPage: true` の間 `after: $threadsCursor` を渡し、カーソル送りで全スレッドを取得する (下記は初回ページの取得例)。各スレッドの comments が 50 件を超える稀なケースは、そのスレッドを単位に別途ページングする — コメントのカーソルはスレッドごとに異なるため、全スレッド一括の単一 `commentsCursor` では正しく辿れない (下記の例では comments 側の cursor 変数は使わず、50 件超の検知だけ `comments.pageInfo.hasNextPage` で行う)。
 
 ```bash
 gh api graphql -f query='
-query($owner: String!, $repo: String!, $pr: Int!, $threadsCursor: String, $commentsCursor: String) {
+query($owner: String!, $repo: String!, $pr: Int!, $threadsCursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       reviewThreads(first: 100, after: $threadsCursor) {
@@ -81,7 +81,7 @@ query($owner: String!, $repo: String!, $pr: Int!, $threadsCursor: String, $comme
         nodes {
           id            # GraphQL Node ID — resolveReviewThread mutation の threadId に渡す
           isResolved
-          comments(first: 50, after: $commentsCursor) {
+          comments(first: 50) {
             pageInfo { hasNextPage endCursor }
             nodes {
               id          # GraphQL Node ID
