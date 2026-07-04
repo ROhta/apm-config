@@ -27,6 +27,7 @@ instructions を受け取る（同内容のローカルコピーは git 管理�
 | 統一版 local-dev-workflow | 各リポジトリ版の良いとこ取り統合（superpowers 4 スキル駆動 + 自走レビュー応答ループ） |
 | dev-workflow の前提 | 全リポジトリに `.github/release.yml` とラベル体系を整備して統一 |
 | mcp-servers の配置 | mcp-toolkit パッケージに置く（MCP 採用リポジトリだけに届く） |
+| apm CLI バージョン | 全 5 リポジトリの mise.toml を 0.23.1 に統一 |
 
 ## 3. apm-config のパッケージ構成
 
@@ -146,6 +147,14 @@ speckit-workflow しか載っていないのはこのため）。各リポジト
   `enhance-3 ドキュメント` / `bug-1 重大バグ` / `bug-2 バグ` / `bug-3 改善` / `dependencies` /
   `refactor`）を標準として、wine_record / bingo_mcp / company_analysis に `.github/release.yml` と
   GitHub ラベル（`gh label create`）を作成する
+- apm CLI バージョン統一: 全 5 リポジトリの `mise.toml` の `github:microsoft/apm` を **0.23.1** に
+  更新する（現状 bingo 0.18.0 / bingo_next 0.18.0 / bingo_mcp 0.19.0 / company_analysis 0.19.0 /
+  wine_record 0.23.0）。0.23.1 は transitive MCP（chrome-devtools 等）の trust 挙動が正しく、
+  context7 / serena が正常展開されることを検証済みのバージョン（apm-config README の
+  `--trust-transitive-mcp` 記述の根拠）。mise.toml の記述形式（`extract_all` や `[settings]` の
+  有無）は各リポジトリの既存を踏襲し、バージョン番号のみ揃える。この統一により §8 の
+  「バージョン差で配信挙動が異なる」リスクを根本解消する。各リポジトリの移行 PR に含める
+  （同一リポジトリを二度触らない）
 - 配信された instructions の生成物（`.claude/rules/` / `.github/instructions/`）について、
   **追跡例外は増やさない**（pr-review / language のみ維持）。今回の 5 ファイルはコードレビュー
   指示ではないため、クラウド Copilot Code Review への経路は不要
@@ -167,11 +176,12 @@ speckit-workflow しか載っていないのはこのため）。各リポジト
 ## 7. ロールアウト順序と検証
 
 1. **apm-config** に PR（base v1.1.0 / mcp-toolkit v1.1.0 / speckit v1.0.0）→ マージ SHA を取得
-2. **bingo**（参照実装）: pin 更新 + 5 ファイル削除 + dedupe ラッパー検証 →
-   `apm install && apm compile`
-3. **wine_record**: speckit 置き換え + `#main` ピン修正 + release.yml 整備
-4. **bingo_next**: base 新規導入 + 分岐版削除
-5. **bingo_mcp / company_analysis**: pin 更新 + release.yml 整備 + 重複精査
+2. **bingo**（参照実装）: mise.toml を 0.23.1 に更新（最初にこのバージョンで配信挙動を確認）
+   + pin 更新 + 5 ファイル削除 + dedupe ラッパー検証 → `apm install && apm compile`
+3. **wine_record**: mise.toml 0.23.1（0.23.0 → 0.23.1）+ speckit 置き換え + `#main` ピン修正
+   + release.yml 整備
+4. **bingo_next**: mise.toml 0.23.1 + base 新規導入 + 分岐版削除
+5. **bingo_mcp / company_analysis**: mise.toml 0.23.1 + pin 更新 + release.yml 整備 + 重複精査
 
 各リポジトリでの検証項目:
 
@@ -180,17 +190,17 @@ speckit-workflow しか載っていないのはこのため）。各リポジト
 - 削除したローカル instructions 由来の旧生成物が残っていないこと（オーファン掃除）
 - mcp-toolkit 依存リポジトリでは `--trust-transitive-mcp` 付きで MCP 4 サーバーが展開されること
 - wine_record では Spec Kit の constitution 込み `apm compile` が引き続き成立すること
+- 全リポジトリの `mise.toml` の apm が 0.23.1 で揃い、`mise install` が成立すること
 
 ## 8. リスクと対処
 
 | リスク | 対処 |
 | --- | --- |
-| apm バージョン差（0.18 / 0.19 / 0.23）で配信挙動が異なる | 各リポジトリの実バージョンで検証。差異が出たら当該リポジトリの mise.toml 更新を個別判断 |
+| 0.23.1 への統一後に一部リポジトリで既存の配信挙動が変わる | 参照実装 bingo で 0.23.1 の配信挙動を最初に確認してから他リポジトリへ展開。問題が出たら当該リポジトリで切り分ける |
 | 統一版 local-dev-workflow が bingo_next の詳細な自走チェック記述（231 行版）より簡素になり運用が変わる | wine_record 版（bingo_next 版を簡潔化した後継）をベースにするため実質的な機能後退はない。懸念があれば bingo_next のレビューで差分を確認 |
 | release.yml 未整備リポジトリでラベル運用が形骸化する | ラベル作成を release.yml 整備と同一 PR で行い、dev-workflow 指示の前提を PR マージ時点で満たす |
 
 ## 9. スコープ外
 
-- apm CLI バージョン（mise.toml）の 5 リポジトリ統一（必要なら別途提案）
 - bingo に残る 6 ファイル（feature-spec, github-ops, lint, setup, styling, typescript）の共通化
 - mcp-toolkit の MCP セット構成変更
