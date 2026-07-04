@@ -17,7 +17,7 @@ reviews:
   path_filters:
     - "!**/apm_modules/**"
     - "!**/apm.lock.yaml"
-    - "!.remember/**"
+    - "!**/.remember/**"
   path_instructions:
     - path: "**/apm.yml"
       instructions: |
@@ -25,7 +25,7 @@ reviews:
         - version は semver か、変更内容に対して妥当な増分か（破壊的変更ならメジャー等）を確認する。
         - type（instructions 等）と実ディレクトリ構成（.apm/instructions/ 配下の内容）が一致しているか確認する。
         - targets（claude / codex / copilot 等）が意図した対象と過不足なく一致しているか確認する。
-        - dependencies.mcp / dependencies.apm の各エントリが確実に pin されているか確認する。npx / uvx などのパッケージは "@x.y.z" 形式でバージョン固定、git 由来（git+https://...）は #<commit-sha> または @<commit-sha> でコミット固定されていること。tag / branch / latest への浮動参照や pin 欠落は指摘する。
+        - dependencies.mcp の各エントリが確実に pin されているか確認する。npx / uvx などのパッケージは "@x.y.z" 形式でバージョン固定、git 由来（git+https://...）は #<commit-sha> または @<commit-sha> でコミット固定されていること。tag / branch / latest への浮動参照や pin 欠落は指摘する。dependencies.apm のサブパス参照は `#main` のようなブランチ参照を許容する（実際のコミット固定は consumer 側の apm.lock.yaml が担う）。
         - サブパス参照（例: ROhta/apm-config/base#main）が実在するサブパッケージを指しているか、README の記述と整合しているか確認する。
     - path: "**/*.instructions.md"
       instructions: |
@@ -45,6 +45,12 @@ reviews:
       enabled: true
     gitleaks:
       enabled: true
+    actionlint:
+      enabled: false
+    eslint:
+      enabled: false
+    checkov:
+      enabled: false
 
 knowledge_base:
   code_guidelines:
