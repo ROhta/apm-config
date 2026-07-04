@@ -12,8 +12,9 @@ ROhta の各リポジトリで共通する [APM](https://microsoft.github.io/apm
 
 | サブパッケージ | 内容 | 主な利用先 |
 | --- | --- | --- |
-| `base/` | 言語ルール・PR レビュー観点の共通 instructions と superpowers スキル | 全リポジトリ |
-| `mcp-toolkit/` | context7 / serena / deepwiki（`dependencies.mcp` 直接定義）と chrome-devtools（marketplace プラグイン参照）の pin を一元管理 | MCP を使うリポジトリ |
+| `base/` | 言語ルール・PR レビュー観点、APM 運用・プラグイン管理、開発/リリースフロー、ローカル開発ワークフローの共通 instructions と superpowers スキル | 全リポジトリ |
+| `mcp-toolkit/` | context7 / serena / deepwiki（`dependencies.mcp` 直接定義）と chrome-devtools（marketplace プラグイン参照）の pin を一元管理、MCP サーバー運用ルール instructions | MCP を使うリポジトリ |
+| `speckit/` | Spec Kit 機能開発フローと Spec Kit × APM 連携の instructions | Spec Kit を使うリポジトリ |
 
 ## consumer 側の使い方
 
