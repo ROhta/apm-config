@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit 設定。ドキュメント: https://docs.coderabbit.ai/getting-started/yaml-configuration
+language: "ja-JP"
+tone_instructions: "指摘は具体的に。該当箇所・理由・可能なら修正案を含める。PR 本文の「## 見てほしいところ」を最優先で確認する。本リポジトリはコードをほぼ持たない APM 設定カタログのため、apm.yml のパッケージ定義・pin と instructions の記述品質を重点的に見る。"
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_usernames:
+      - "dependabot[bot]"
+  path_filters:
+    - "!**/apm_modules/**"
+    - "!**/apm.lock.yaml"
+    - "!.remember/**"
+  path_instructions:
+    - path: "**/apm.yml"
+      instructions: |
+        - APM パッケージ定義として妥当か確認する。name / version / description / author / license / type / targets / includes / dependencies が揃い、値が整合しているか。
+        - version は semver か、変更内容に対して妥当な増分か（破壊的変更ならメジャー等）を確認する。
+        - type（instructions 等）と実ディレクトリ構成（.apm/instructions/ 配下の内容）が一致しているか確認する。
+        - targets（claude / codex / copilot 等）が意図した対象と過不足なく一致しているか確認する。
+        - dependencies.mcp / dependencies.apm の各エントリが確実に pin されているか確認する。npx / uvx などのパッケージは "@x.y.z" 形式でバージョン固定、git 由来（git+https://...）は #<commit-sha> または @<commit-sha> でコミット固定されていること。tag / branch / latest への浮動参照や pin 欠落は指摘する。
+        - サブパス参照（例: ROhta/apm-config/base#main）が実在するサブパッケージを指しているか、README の記述と整合しているか確認する。
+    - path: "**/*.instructions.md"
+      instructions: |
+        - AI エージェント向けの指示として曖昧さがないか確認する。多義的な表現・主語や対象の欠落・矛盾する指示がないか、機械的に解釈しても意図どおり動くか。
+        - frontmatter（description / applyTo）が適切か確認する。applyTo の glob が意図した範囲を過不足なくカバーしているか。
+        - language.instructions.md の方針に沿い、自然言語部分が日本語で書かれているか確認する（Conventional Commits の `<type>(<scope>):` など形式部分の英語は許容）。
+        - 全リポジトリへ配信される共通ルールであることを踏まえ、特定リポジトリ固有の前提に依存していないか、汎用的に成立する記述かを確認する。
+    - path: "README.md"
+      instructions: |
+        - consumer 向け手順（apm install / apm compile、dependencies.apm へのサブパス参照追加など）が正確で、実態と整合しているか確認する。
+        - 記載されているサブパッケージ・参照パス・pin ポリシーが、実際の base/ や mcp-toolkit/ の apm.yml と一致しているか確認する。
+        - 手順どおりに実行して再現できるか、前後の順序や前提条件に抜けがないか確認する。
+  tools:
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "base/.apm/instructions/*.md"
+      - "**/*.instructions.md"
+
+chat:
+  auto_reply: true
