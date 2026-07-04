@@ -13,7 +13,7 @@ ROhta の各リポジトリで共通する [APM](https://microsoft.github.io/apm
 | サブパッケージ | 内容 | 主な利用先 |
 | --- | --- | --- |
 | `base/` | 言語ルール・PR レビュー観点の共通 instructions と superpowers スキル | 全リポジトリ |
-| `mcp-toolkit/` | context7 / semgrep / serena / chrome-devtools を marketplace プラグインとして一元 pin | MCP を使うリポジトリ |
+| `mcp-toolkit/` | context7 / serena / deepwiki（`dependencies.mcp` 直接定義）と chrome-devtools（marketplace プラグイン参照）の pin を一元管理 | MCP を使うリポジトリ |
 
 ## consumer 側の使い方
 
@@ -31,8 +31,8 @@ dependencies:
 その後 consumer 側で以下を実行する。
 
 ```bash
-# mcp-toolkit を参照する場合は --trust-transitive-mcp が必須。
-# 依存プラグインが同梱する MCP サーバーはデフォルトでブロックされるため。
+# chrome-devtools のみプラグイン参照（transitive）のため、mcp-toolkit を使うなら
+# --trust-transitive-mcp を付ける。フラグは全 MCP に一括でかかる。
 apm install --trust-transitive-mcp   # 依存を apm_modules/ に取得し .github/instructions/・.claude/rules/・.claude/settings.json・.agents/skills/ 等へ展開
 apm compile                          # AGENTS.md 等を生成
 ```
@@ -41,32 +41,46 @@ apm compile                          # AGENTS.md 等を生成
   コミット SHA を固定するため、`apm update` を実行するまで内容は変わらない。
 - 共通化した instructions は consumer ローカルの `.apm/instructions/` から削除する
   （ローカルの同名ファイルは依存より優先されるため、残すと共通化が効かない）。
-- `--trust-transitive-mcp` は apm.yml / apm.lock.yaml に永続化されない。素の
-  `apm install` を打つと mcp-toolkit の MCP がクライアント設定に展開されないため、
-  ラッパースクリプト（Makefile 等）でフラグ込みのコマンドを標準化することを推奨。
-- mcp-toolkit を使う場合、ユーザーレベルに同名プラグイン（context7 / serena /
-  semgrep / chrome-devtools）が残っていると MCP サーバーが二重起動する。プロジェクト
-  側に一本化するならユーザーレベルのプラグインをアンインストールすること。
+- trust の粒度: `dependencies.mcp` で直接定義した context7 / serena / deepwiki は
+  consumer から見て直接依存（depth 1）なので self-defined でも auto-trust され、
+  フラグなしで展開される。`--trust-transitive-mcp` が要るのはプラグイン参照の
+  chrome-devtools（depth 2）だけ。chrome-devtools を使う限りは install 時にフラグを
+  付与する（フラグは apm.yml / apm.lock.yaml に永続化されないため、ラッパー
+  スクリプト（Makefile 等）で標準化することを推奨）。
+- mcp-toolkit を使う場合、ユーザーレベルに同名の MCP / プラグイン（context7 /
+  serena / deepwiki / chrome-devtools）が残っていると MCP サーバーが二重起動する。
+  プロジェクト側に一本化するならユーザーレベルのプラグイン・設定をアンインストール
+  すること。
 
 ## 更新フロー
 
 1. 本リポジトリの `base/` や `mcp-toolkit/` を編集し、ブランチ + PR でマージ。
-   - プラグインの pin を上げる際は、公式 marketplace
-     （`anthropics/claude-plugins-official`）の該当コミット SHA に合わせる。
+   - context7 / serena は `dependencies.mcp` のバージョン / コミット SHA を直接編集して pin を上げる。
+   - chrome-devtools はプラグイン参照リポジトリ（`ChromeDevTools/chrome-devtools-mcp`）の
+     該当コミット SHA に合わせる。
 2. 各 consumer で `apm update --trust-transitive-mcp && apm compile` を実行し、
    `apm.lock.yaml` の差分をコミットする。
 
 ## pin ポリシー（mcp-toolkit）
 
-共通開発ツールの MCP は marketplace プラグインとして参照し、プラグインリポジトリの
-コミット SHA で pin する。ただし pin できる範囲はプラグインの manifest 次第で異なる。
+共通開発ツールの MCP はリポジトリ間で不揃いになりやすいため、本リポジトリで一元 pin する。
+MCP サーバー本体のバージョンまで固定するため、原則 `dependencies.mcp` に直接定義する。
 
-| プラグイン | pin される範囲 | MCP サーバー本体 |
-| --- | --- | --- |
-| context7 | プラグイン（skills 等） | ✗ 未 pin（`npx -y @upstash/context7-mcp` で毎回 latest） |
-| serena | プラグイン | ✗ 未 pin（`uvx --from git+.../serena` で main HEAD 追従） |
-| chrome-devtools | プラグイン | ✓ pin される（manifest が `chrome-devtools-mcp@x.y.z` を指定） |
-| semgrep | プラグイン | ⚠ `${CLAUDE_PLUGIN_ROOT}` 依存。Claude Code 以外では動かない可能性 |
+| MCP | 定義方法 | 配布先 | pin 範囲 |
+| --- | --- | --- | --- |
+| context7 | `dependencies.mcp`（stdio: `npx -y @upstash/context7-mcp@3.2.0`） | claude / codex / copilot | ✓ 本体まで pin |
+| serena | `dependencies.mcp`（stdio: `uvx --from git+.../serena@<sha>`） | claude / codex / copilot | ✓ 本体まで pin |
+| deepwiki | `dependencies.mcp`（remote http: `https://mcp.deepwiki.com/mcp`） | claude / codex / copilot | ─（ホスト型サービス。pin 対象なし） |
+| chrome-devtools | marketplace プラグイン参照（SHA pin） | claude / codex / copilot | ✓ プラグイン manifest が `chrome-devtools-mcp@x.y.z` を pin |
 
-context7 / serena の MCP サーバー本体まで pin したい場合は、この 2 つのみ
-`dependencies.mcp` への自前定義（command / args / バージョン直書き）に切り替える。
+補足:
+
+- **semgrep は本リポジトリでは配布しない。** 上流プラグインの MCP は
+  `${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh` と Claude Code 専用 hooks に依存し、
+  自動スキャン（Guardian）の本体価値が Claude 固有のため。semgrep が必要な
+  リポジトリは、各自 Claude ネイティブプラグインとして個別導入する。
+- **deepwiki は streamable-http（`/mcp`）を使う。** SSE ではないため codex にも
+  書き込まれる（APM の codex アダプタは SSE リモートのみ拒否する）。
+- chrome-devtools を `dependencies.mcp` の直接定義（`npx -y chrome-devtools-mcp@x.y.z`）に
+  切り替えれば depth 1 化して `--trust-transitive-mcp` が不要になるが、本 PR では
+  上流プラグインの pin 追従を優先してプラグイン参照を維持している。
