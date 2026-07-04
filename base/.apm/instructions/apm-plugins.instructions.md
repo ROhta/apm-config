@@ -1,0 +1,88 @@
+---
+description: APM (Agent Project Manager) を介した依存パッケージ (プラグイン bundle / 単一プリミティブ) の運用ルール
+applyTo: "apm.yml"
+---
+
+# APM プラグイン管理ルール
+
+## Source of Truth
+
+`apm.yml` の `dependencies.apm` がこのリポジトリで使う APM 依存パッケージの Source of Truth。扱える形態は 2 種類:
+
+- **プラグイン bundle**: Skills (SKILL.md) / commands / prompts / hooks / instructions / agents 等を 1 リポジトリにまとめたもの (例: `obra/superpowers`)
+- **単一プリミティブ (virtual file)**: 既存リポジトリ内の特定の `*.instructions.md` / `*.prompt.md` / `SKILL.md` などを 1 ファイル単位で取り込むもの (例: `github/awesome-copilot/instructions/code-review-generic.instructions.md`)
+
+`apm install` を実行すると、ここに宣言された依存が `apm_modules/` にダウンロードされ、各ターゲット向けに `.claude/rules/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `.agents/skills/`, `.github/instructions/`, `.github/prompts/`, `.github/hooks/` 等へ展開される (内容に応じて配信先が変わる)。Codex 向けには専用の配信先を持たない代わりに、`apm compile` 時に instructions / skills 内容が `AGENTS.md` に組み込まれる。
+
+## 現在どのプラグインを使っているか
+
+各リポジトリで実際に採用しているプラグイン (共通パッケージ `ROhta/apm-config/*`・汎用スキル・単一プリミティブ) は、そのリポジトリの `apm.yml` の `dependencies.apm` を参照する。共通パッケージ (base / mcp-toolkit / speckit) の内容を変えたい場合は提供元 apm-config を編集する。
+
+### vendor-neutral 方針
+
+`dependencies.apm` には特定 AI ベンダー (anthropics 等) 組織配下のリポジトリを直接指定せず、コミュニティ curated marketplace (`github/awesome-copilot`) や中立 OSS 作者リポジトリ (`obra/superpowers`) を経由する。理由: ベンダー組織のプラグインは「そのベンダーのランタイム前提」 (例: Claude Code の Stop hook + subagent 機構) で書かれていることが多く、Codex などのターゲットに同等機能が配信されないため。
+
+## バージョン固定（SHA ピン / lock）
+
+`dependencies.apm` のエントリはバージョンを固定して、`apm install` 毎に上流 `main` を引いて各メンバーの開発体験が静かにドリフトするのを防ぐ。固定方法は参照先で使い分ける。
+
+- **外部サードパーティ（`obra/superpowers`, `github/awesome-copilot` 等）**: `#<sha>` で **必ずピンする**。ピンしないと `apm install` で `unpinned -- add #tag or #sha to prevent drift` の警告が出るため気付ける。
+- **apm-config 自身の共通パッケージ（`ROhta/apm-config/base` 等）**: `#main` 参照 + `apm.lock.yaml`（consumer 側でコミット）で解決済み SHA を固定する運用も可。lock が `apm update` を実行するまで内容を固定するため `#main` でもドリフトしない（apm-config README の推奨）。`#<sha>` 直接ピンでもよい。
+
+```yaml
+dependencies:
+  apm:
+    - github/awesome-copilot/instructions/code-review-generic.instructions.md#5b049e4e196c10aab8ddfd9e492323d08cf985b0
+    - obra/superpowers#f2cbfbefebbfef77321e4c9abc9e949826bea9d7
+    - ROhta/apm-config/base#main   # 共通パッケージは lock コミット運用なら #main 可
+```
+
+## プラグインの追加
+
+### marketplace 経由 (推奨。検索用)
+
+```bash
+# 1. marketplace を一時的に register (global config のみ。apm.yml には影響しない)
+apm marketplace add <owner>/<repo>
+# 2. plugin を install (apm.yml に追記される)
+apm install <plugin>@<marketplace-name>
+# 3. unpinned 警告が出るので apm.lock.yaml の resolved_commit を見て #sha でピン
+```
+
+### 直接 GitHub から (marketplace 未登録のプラグイン)
+
+```bash
+apm install <owner>/<repo>#<sha>
+# または path 指定 (プラグイン bundle のサブディレクトリ)
+apm install <owner>/<repo>/<path>#<sha>
+# または単一プリミティブファイル (instructions / prompts / skills など 1 ファイル指定)
+apm install <owner>/<repo>/<path-to-file>.<ext>.md#<sha>
+```
+
+`apm.yml` に `<owner>/<repo>[/<path>]#<sha>` 形式が直接書ければ、global の marketplace 登録は **不要**。チームメイトは `git clone` 後 `apm install` だけで同じプラグインを取得できる。
+
+`<path-to-file>.instructions.md` のように **末尾がファイル名** の場合、APM は単一プリミティブ (virtual file) として取り込む。プラグイン全体を取り込まずに必要な 1 ファイルだけを依存にしたい時 (例: 汎用 instructions のみが欲しいケース) に使う。
+
+## プラグインの削除
+
+`apm.yml` の `dependencies.apm` 配下から該当行を削除した後、`apm install` を再実行する。 `apm_modules/<owner>/<repo>/` と展開済みファイルが残った場合は手動で掃除する。(`apm uninstall <package>` の動作は未検証)
+
+## 生成物の場所
+
+`apm install` がプラグインを展開する先。原則すべて `.gitignore` 対象（例外は `.github/instructions/{pr-review,language}.instructions.md` のみ。クラウド Copilot 経路確保のため追跡）。
+
+| パス                          | 由来                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `apm_modules/<owner>/<repo>/` | 依存のソースコピー (cache)                                                   |
+| `.claude/rules/`              | Claude Code 用 instructions (virtual file の `*.instructions.md` 等の展開先) |
+| `.claude/skills/`             | Claude Code Skills (SKILL.md)                                                |
+| `.agents/skills/`             | クロスクライアント Skills (Cursor / Codex / Gemini 等が読む)                 |
+| `.claude/commands/`           | Claude Code スラッシュコマンド                                               |
+| `.claude/hooks/`              | Claude Code フックスクリプト                                                 |
+| `.claude/apm-hooks.json`      | APM がフック登録に用いる索引                                                 |
+| `.claude/settings.json`       | フック有効化等のクライアント設定                                             |
+| `.github/instructions/`       | GitHub Copilot 用 instructions (`*.instructions.md`)。うち base 由来の pr-review / language のみ追跡 |
+| `.github/prompts/`            | GitHub Copilot プロンプト (`*.prompt.md`)                                    |
+| `.github/hooks/`              | GitHub 用フック (Copilot CLI 等)                                             |
+
+`.claude/settings.json` を ignore しているのは、APM がプラグインのフック有効化のために絶対パスを書き込むため (リポジトリで共有しても各環境でパスが食い違って意味がない)。個人の Claude Code 設定はユーザースコープ (`~/.claude/settings.json`) または `.claude/settings.local.json` (Claude Code の慣習で per-user 扱い) に置くこと。

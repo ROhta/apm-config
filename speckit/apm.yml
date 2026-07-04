@@ -1,0 +1,14 @@
+name: apm-config-speckit
+version: 1.0.0
+description: Spec Kit 採用リポジトリ向けの機能開発フロー instructions（Spec Kit × APM 連携）
+author: ROhta
+license: GPL-3.0-or-later
+type: instructions
+targets:
+  - claude
+  - codex
+  - copilot
+includes: auto
+dependencies:
+  apm: []
+  mcp: []
