@@ -66,6 +66,13 @@ base と同じ仕組みで instructions が配信される。
 向け、specify / plan 実行後に `apm compile` を 1 回回す運用。wine_record の
 apm-workflow.instructions.md から移設）。
 
+なお `spec-context.instructions.md` は Spec Kit の hook（`speckit.agent-context.update`）が
+自動更新する動的・リポジトリ固有のプランポインタ（現在の `plan.md` を指す）であり、内容が
+リポジトリ・機能ごとに異なるため speckit パッケージの**配信物には含めない**（ツリーに
+speckit-workflow しか載っていないのはこのため）。各リポジトリにローカル保持し
+（§5 で wine_record が「spec-context は残す」としているのはこれ）、Spec Kit hook が生成・更新する。
+冒頭の「同内容のローカルコピーは git 管理しない」方針の対象外＝そもそも共通の同一内容ではない。
+
 ## 4. 各ファイルの内容方針（汎用化の境界線）
 
 ### 4.1 base/apm-plugins.instructions.md
@@ -73,8 +80,8 @@ apm-workflow.instructions.md から移設）。
 - 残す: SoT 宣言（`apm.yml` の `dependencies.apm`）、プラグイン bundle / 単一プリミティブの
   2 形態、vendor-neutral 方針、SHA ピン必須、marketplace / 直接指定の追加手順、削除手順、
   生成物の場所テーブル
-- 抜く: `pnpm apm-install` ラッパー節（bingo 固有。§7 参照）、「配信されるプラグイン」の
-  リポジトリ固有依存一覧表（「各リポジトリの `apm.yml` を参照」に置換）
+- 抜く: `pnpm apm-install` ラッパー節（bingo / bingo_mcp 固有。§6 参照）、「配信される
+  プラグイン」のリポジトリ固有依存一覧表（「各リポジトリの `apm.yml` を参照」に置換）
 
 ### 4.2 base/apm-workflow.instructions.md
 
@@ -133,7 +140,7 @@ apm-workflow.instructions.md から移設）。
 | bingo_next | **base を新規追加**（mcp-toolkit は追加しない = MCP 非使用の判断維持） | apm-workflow, local-dev-workflow, pr-review（base 配信と重複） | あり（変更なし） |
 | wine_record | base の `#main` を SHA ピンに修正 + **speckit を追加** | apm-workflow, local-dev-workflow（spec-context, setup は残す） | **新規整備** |
 | bingo_mcp | pin 更新 | apm.instructions.md（base の apm-workflow / apm-plugins 相当）、workflow.instructions.md（dev-workflow / local-dev-workflow 相当）。残: architecture, development, widget | **新規整備** |
-| company_analysis | pin 更新 | agents-workflow.instructions.md を縮小改訂: base と重複する共通部分（SSoT 宣言・mise・ファイル管理方針）を削り、`.apm/agents/*.agent.md` サブエージェント運用などリポジトリ固有部分のみ残す | **新規整備** |
+| company_analysis | pin 更新 | agents-workflow.instructions.md を縮小改訂: base と重複する共通部分（SoT 宣言・mise・ファイル管理方針）を削り、`.apm/agents/*.agent.md` サブエージェント運用などリポジトリ固有部分のみ残す | **新規整備** |
 
 - release.yml 統一: bingo / bingo_next のラベル体系（`enhance-1 破壊的変更` / `enhance-2 新機能` /
   `enhance-3 ドキュメント` / `bug-1 重大バグ` / `bug-2 バグ` / `bug-3 改善` / `dependencies` /
