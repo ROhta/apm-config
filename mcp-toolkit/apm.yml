@@ -1,6 +1,6 @@
 name: apm-config-mcp-toolkit
 version: 1.0.0
-description: 共通 MCP サーバーセット（context7 / semgrep / serena / chrome-devtools）の pin 一元管理
+description: 共通開発ツール MCP（context7 / serena / chrome-devtools / deepwiki）の pin を一元管理
 author: ROhta
 license: GPL-3.0-or-later
 type: instructions
@@ -10,8 +10,18 @@ targets:
   - copilot
 includes: auto
 dependencies:
-  apm: []
+  apm:
+    # chrome-devtools は上流リポジトリ自体がプラグイン形式。プラグイン manifest が
+    # MCP サーバー本体を pin する（この SHA 時点で chrome-devtools-mcp@1.5.0）。
+    # 注意: プラグイン経由の MCP は consumer から見て transitive（depth 2）になるため、
+    #       consumer 側で `apm install --trust-transitive-mcp` が必要。
+    - ChromeDevTools/chrome-devtools-mcp#913308263bdc8042af74924b68dc39a374ad071d
   mcp:
+    # 直接定義（stdio / remote）。consumer から見て mcp-toolkit は直接依存（depth 1）
+    # なので self-defined でも auto-trust され、これらには --trust-transitive-mcp 不要。
+    #
+    # context7 / serena は npx・uvx で MCP サーバー本体のバージョンまで pin。
+    # コマンド直書きなので claude / codex / copilot いずれにも可搬。
     - name: context7
       registry: false
       transport: stdio
@@ -19,12 +29,6 @@ dependencies:
       args:
         - -y
         - "@upstash/context7-mcp@3.2.0"
-    - name: semgrep
-      registry: false
-      transport: stdio
-      command: uvx
-      args:
-        - semgrep-mcp
     - name: serena
       registry: false
       transport: stdio
@@ -34,10 +38,9 @@ dependencies:
         - git+https://github.com/oraios/serena@acee002dc498e5f4c368eb9d45ab67e480d77832
         - serena
         - start-mcp-server
-    - name: chrome-devtools
+    # deepwiki は認証不要のホスト型リモート MCP（streamable-http エンドポイント）。
+    # SSE ではないため codex アダプタも受理し、claude / codex / copilot 全てに配布される。
+    - name: deepwiki
       registry: false
-      transport: stdio
-      command: npx
-      args:
-        - -y
-        - chrome-devtools-mcp@1.2.0
+      transport: http
+      url: https://mcp.deepwiki.com/mcp
