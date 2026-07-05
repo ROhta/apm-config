@@ -8,7 +8,8 @@
 ## 1. 背景と目的
 
 apm-config は各 consumer リポジトリへ配る APM 設定の SoT であり、上流依存を
-`apm.yml` に**厳密固定（SHA ピン必須）**している。現状これらの pin 更新は
+`apm.yml` に**厳密固定**している（git 依存 = superpowers / chrome-devtools / serena は
+commit SHA ピン、context7 は npm の exact version ピン）。現状これらの pin 更新は
 README「更新フロー」に記載のとおり**手動**（上流の最新版を見て SHA / バージョンを
 手書き）で、追従が属人的・後追いになりやすい。
 
@@ -43,8 +44,8 @@ README「更新フロー」に記載のとおり**手動**（上流の最新版�
 | 論点 | 決定 |
 | --- | --- |
 | 実装方式 | **独自 GitHub Actions ワークフロー（スクリプト方式）**。Renovate / 純正 `apm outdated`+`update` は不採用 |
-| pin 形式 | **SHA ピンを維持**（README の「SHA ピン必須」ポリシー継続） |
-| 「最新」の定義 | **最新 release tag を commit SHA に解決**して書き換え（main HEAD 追従はしない＝未リリースの気まぐれ変更を取り込まない） |
+| pin 形式 | **git 依存（superpowers / chrome-devtools / serena）は commit SHA ピンを維持、context7 は npm の exact version ピンを維持**（README の version / SHA 併用ピンポリシー継続） |
+| 「最新」の定義 | git 依存は**最新 release tag を commit SHA に解決**して書き換え（main HEAD 追従はしない＝未リリースの気まぐれ変更を取り込まない）。context7 は `npm view` の最新版へ更新 |
 | トリガー頻度 | 週次（cron）+ 手動実行 |
 | version bump | 依存が変わったサブパッケージの `version:` を patch 上げ |
 
@@ -55,7 +56,7 @@ README「更新フロー」に記載のとおり**手動**（上流の最新版�
   (regex) が必要で結局特殊対応が残る。PR 内での apm 解決検証も別途。
 - **純正 `apm outdated` + `apm update --yes`**: (1) 各サブパッケージへ lockfile 新規導入が
   必要（現状ゼロ）、(2) context7 / serena は原理的に対象外で独自処理を併用＝split-brain、
-  (3) SHA pin を tag / semver ref へ緩める必要があり「SHA ピン必須」ポリシーと衝突。
+  (3) git 依存の commit SHA ピンを tag / semver ref へ緩める必要があり、その SHA ピン方針と衝突。
 
 ## 4. コンポーネント
 
@@ -95,16 +96,25 @@ README「更新フロー」に記載のとおり**手動**（上流の最新版�
 
 - `/commits/<ref>` エンドポイントで解決するため annotated / lightweight tag の差を吸収
   （常に ref が指す commit SHA を返す）。
-- `releases/latest` は prerelease / draft を除外（安定版のみ追従）。release が存在しない
-  依存は skip + warn（現状 4 依存はすべて release あり）。
+- `releases/latest` は prerelease / draft を除外（安定版のみ追従）。release / npm 版が
+  **取得できない場合のみ** skip + warn し他依存の処理を継続する（現状 4 依存はすべて
+  release あり）。
 - 置換は **anchored regex（perl）で対象文字列のみ外科的に**行い、コメント・整形・
   他の行を完全保持する。`yq` 等での全体再整形はコメント churn を招くため使わない。
+- **置換の fail-fast**: managed な 4 依存それぞれについて、書き換え前に現在の pin
+  （anchor）が対象ファイルに**ちょうど 1 回**マッチすることを検証する。0 回 / 複数回
+  マッチなら manifest 形状の変化と見なし、スクリプトを**非ゼロ終了で失敗**させる。
+  これにより「regex が外れても差分ゼロで成功扱いになり、週次更新が静かに止まる」事故を
+  防ぐ。上記の release / npm 版取得不可（skip + warn で継続）と anchor 不一致（error）は
+  明確に区別する。
 
 ## 6. 変更検知と PR
 
-- 書き換え後 `git diff --quiet -- base/apm.yml mcp-toolkit/apm.yml` で判定。
-  - 差分なし → 何もせず正常終了（ログのみ）。
+- §5.1 の anchor 検証（4 依存すべてが見つかること）を通過した上で、書き換え後
+  `git diff --quiet -- base/apm.yml mcp-toolkit/apm.yml` で判定。
+  - 差分なし（＝全 anchor は見つかったが値が既に最新）→ 何もせず正常終了（ログのみ）。
   - 差分あり → 下記で PR 作成 / 更新。
+  - anchor 不一致で §5.1 が失敗した場合はここに到達せず job が失敗する（見逃し防止）。
 - **`peter-evans/create-pull-request@v6`** を使用。
   - `branch: chore/apm-deps-update`（固定ブランチ＝毎回同じ PR をローリング更新）。
   - `commit-message` / `title`: `chore(deps): apm 依存 pin を更新`（日本語 + Conventional Commits＝リポジトリ規約準拠）。
@@ -150,7 +160,10 @@ permissions:
 - **ローカル dry-run**: `./scripts/update-apm-pins.sh --dry-run` で書き換え差分を表示。
   現時点で **context7 `3.2.0 → 3.2.2` が検知される**（検証可能な実ケース）。
 - **冪等性**: 更新適用後に再実行して差分ゼロを確認。
-- **release 不在時**: 対象を skip し他依存の処理を継続すること。
+- **release / npm 版取得不可時**: 対象を skip + warn し他依存の処理を継続すること。
+- **anchor 不一致時の fail-fast**: いずれかの managed 依存の anchor をわざと変えた
+  fixture で実行し、スクリプトが非ゼロ終了し job が失敗すること（差分ゼロ成功に
+  ならないこと）。
 - **PR ローリング**: 2 回目以降の実行が新規 PR を乱立させず `chore/apm-deps-update`
   の既存 PR を更新すること。
 
@@ -159,7 +172,7 @@ permissions:
 | リスク | 対処 |
 | --- | --- |
 | 上流が release を出さず main のみ進む依存が将来現れる | 現状 4 依存はすべて release あり。release 不在なら skip + warn し、必要になった時点で追従源を個別に見直す |
-| 置換 regex が上流の記法変更で外れる | anchored regex を各依存の一意な文字列に固定。dry-run のローカルテストと冪等性テストで検知。外れた場合は差分ゼロ（=見逃し）になり得るため、将来 `apm outdated` 併用での二重チェックを検討 |
+| 置換 regex が上流の記法変更で外れる | anchored regex を各依存の一意な文字列に固定。§5.1 の fail-fast（anchor がちょうど 1 回マッチしなければ非ゼロ終了）で「差分ゼロ成功」による見逃しを防ぐ。dry-run のローカルテストと冪等性テストでも検知。さらに将来 `apm outdated` 併用での二重チェックを検討 |
 | `GITHUB_TOKEN` 製 PR で Actions ベース CI が起動しない | 現状 PR CI は CodeRabbit（App）のみで影響なし。Actions CI 追加時に PAT / App token へ切替 |
 | 自動 version bump が過剰と感じる場合 | patch 上げのみ。不要なら該当ステップを外せる（設計上の分離済み） |
 
