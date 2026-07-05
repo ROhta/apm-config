@@ -22,8 +22,7 @@ applyTo: "**"
 (`verification-before-completion` / `requesting-code-review` / `receiving-code-review`
 / `finishing-a-development-branch`) が利用可能であることを前提とする。
 
-- **Claude Code**: 上記 4 つのスキルが `Skill` ツールから呼び出せることを起動時に確認する
-- **Codex CLI / GitHub Copilot 等**: 同等のスキル集が読み込まれているかを確認する
+- 起動時に、上記 4 スキル（実行環境によっては同等のスキル集）が呼び出せることを確認する（例: Claude Code なら `Skill` ツールから）。
 
 利用できない場合は、ユーザーに次のように案内し、本ワークフローの実行をその場で中断する。
 
