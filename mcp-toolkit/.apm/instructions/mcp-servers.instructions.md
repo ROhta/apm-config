@@ -33,6 +33,18 @@ transitive MCP (depth 2) のため、consumer 側で `apm install --trust-transi
 フラグは全 MCP に一括でかかり、`apm.yml` / `apm.lock.yaml` には永続化されないため、
 ラッパースクリプト (Makefile 等) で標準化することを推奨する。
 
+### chrome-devtools の初回導入時の挙動
+
+新規 consumer で `apm install --trust-transitive-mcp` を実行すると、**1 回目はプラグイン
+`chrome-devtools-mcp` の解決のみで、`.mcp.json` 等への設定は 2 回目の実行で確定する**ことがある
+（transitive プラグインの解決とサーバー設定が別パスのため）。導入時は `apm install
+--trust-transitive-mcp` を 2 回実行し、`.mcp.json` に chrome-devtools を含む 4 サーバーが
+揃うことを確認する。上記ラッパースクリプトで 2 回実行を含めておくと確実。
+
+なお chrome-devtools のコマンドは上流プラグインの manifest が定義する (`npx chrome-devtools-mcp@<pin>`、
+`-y` 無し) ため、初回 `npx` 実行時にインストール確認プロンプトが出うる。CI/エージェント実行では
+`npx` が非対話で進むよう環境を整えるか、事前に一度手動実行しておく。
+
 ## バージョン固定方針
 
 再現性確保のため、各サーバーの具体バージョン / コミット SHA によるピンは
