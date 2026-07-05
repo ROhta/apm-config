@@ -45,7 +45,7 @@ base の apm-workflow「ファイルの管理方針」を基本としつつ、Sp
 - `.claude/skills/` は **混在** する。Spec Kit が管理するスキル（`speckit-*` 等）は **追跡する**（APM 生成物ではない）。一方 `apm install` が展開する APM スキル（superpowers 等）は生成物なので **追跡しない**（base の表が「追跡しない」として指すのはこちら）。両者が同じディレクトリに同居する点に注意。
 - したがって `.gitignore` は `.claude/` を丸ごと無視せず、生成物 `.claude/rules/` を無視しつつ、`.claude/skills/` は Spec Kit スキルを残して APM 展開分のみ無視するよう調整する。
 - `spec-context.instructions.md`: 追跡する（動的だがローカル保持。上記「spec-context.instructions.md の扱い」参照）。
-- `CLAUDE.md`: `apm compile` が constitution 込み（`--with-constitution`）で生成する生成物（追跡しない）。
+- `CLAUDE.md` / `AGENTS.md`: `apm compile` が生成する生成物（追跡しない。`CLAUDE.md` は constitution 込み `--with-constitution`）。
 
 ## ブランチとコミット
 
