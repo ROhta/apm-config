@@ -57,14 +57,14 @@ Spec Kit と APM はどちらも CLAUDE.md / AGENTS.md を生成しようとす�
 
 ## PR レビュー応答ループ (PR 作成 / push 毎)
 
-PR を新規作成、または既存ブランチに push した後、**ユーザーからの合図を待たずに** 自走でレビュースレッドの有無を確認し、指摘があれば対応する。**すべてのスレッドが resolve されるまでループを継続する。** owner / repo は `gh repo view --json nameWithOwner --jq .nameWithOwner` で動的に解決する。
+PR を新規作成、または既存ブランチに push した後、**ユーザーからの合図を待たずに** 自走でレビュースレッドの有無を確認し、指摘があれば対応する。**すべてのスレッドが resolve されるまでループを継続する。** owner / repo は次で動的に解決し、GraphQL には別変数で渡す: `OWNER=$(gh repo view --json owner --jq .owner.login)`、`REPO=$(gh repo view --json name --jq .name)`。
 
 ### 起動
 
 `gh pr create` または `git push` の成功直後に本フローを開始する (ユーザー入力を待たない)。
 
 - **即時 1 回**: push 完了から約 2 分 (120 秒) 待機 (Copilot Review の初回反応待ち) し、下記の検知を 1 回実行する。
-- **追跡 (Claude Code)**: 指摘は遅延することがあるため、`ScheduleWakeup` でさらに 2 分後にもう 1 回フォローする。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
+- **追跡**: 指摘は遅延することがあるため、さらに約 2 分後にもう 1 回フォローする。Claude Code では `ScheduleWakeup` で予約する。それ以外の環境（copilot / codex 等）では手動で約 2 分後に検知を再実行する。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
 - **ユーザー復帰時フォールバック**: 次にユーザー入力を受け取ったとき、その入力が PR と無関係に見えても、まず自分の未マージ PR の未 resolve スレッドを 1 回確認する。あれば「PR #<番号> に未対応のレビュースレッドがあります。先に応答しますか？」と確認し、了承されたら先に処理する。
 
 ### 検知
@@ -73,18 +73,22 @@ PR を新規作成、または既存ブランチに push した後、**ユーザ
 
 ```bash
 gh api graphql -f query='
-query($owner:String!,$repo:String!,$pr:Int!){
+query($owner:String!,$repo:String!,$pr:Int!,$threadsCursor:String){
   repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-    reviewThreads(first:100){ nodes{
-      id            # resolveReviewThread の threadId に渡す Node ID
-      isResolved
-      comments(first:50){ nodes{
-        databaseId  # REST の comment_id（返信先）に渡す数値 ID
-        author{login} body path line
-      } }
-    } } } }
+    reviewThreads(first:100, after:$threadsCursor){
+      pageInfo { hasNextPage endCursor }
+      nodes{
+        id            # resolveReviewThread の threadId に渡す Node ID
+        isResolved
+        comments(first:50){ nodes{
+          databaseId  # REST の comment_id（返信先）に渡す数値 ID
+          author{login} body path line
+        } }
+      } } } }
 }' -F owner=<owner> -F repo=<repo> -F pr=<番号>
 ```
+
+スレッドが 100 件を超える場合は `pageInfo.hasNextPage` が `true` の間、`endCursor` を `after: $threadsCursor` に渡してカーソル送りで全件取得する。
 
 対象は `isResolved: false` かつ先頭コメント (`comments.nodes[0]`) の `author.login` が bot (例: `copilot-pull-request-reviewer`) のスレッドのみ。
 
