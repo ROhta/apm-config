@@ -7,6 +7,10 @@ applyTo: "**"
 
 このリポジトリでローカル開発を進める AI エージェントは、以下のワークフローに従う。
 
+## 適用対象
+
+本ワークフローは **superpowers 系スキルを用いるリポジトリ**向けの手順。**Spec Kit 採用リポジトリ**（`speckit-workflow` 指示が配信されている＝`ROhta/apm-config/speckit` に依存している）は、本ファイルではなく **speckit-workflow の開発フロー**に従い、以下の superpowers ベースの手順（存在確認・§2 のスキル駆動 PR 作成）は使わない。
+
 ## 前提: superpowers の存在確認
 
 本ワークフローは [superpowers](https://github.com/obra/superpowers) 系スキル
