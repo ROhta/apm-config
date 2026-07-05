@@ -7,6 +7,15 @@ applyTo: "**"
 
 このリポジトリでローカル開発を進める AI エージェントは、以下のワークフローに従う。
 
+## 適用対象
+
+本ワークフローは **superpowers 系スキルを用いるリポジトリ**向けの手順。**Spec Kit 採用リポジトリ**は、本ファイルではなく **speckit-workflow の開発フロー**に従い、以下の superpowers ベースの手順（存在確認・§2 のスキル駆動 PR 作成）は使わない。
+
+判定（いずれかが真なら Spec Kit 採用リポジトリ）:
+
+- `apm.yml` の `dependencies.apm` が `ROhta/apm-config/speckit` を参照している
+- `speckit-workflow` 指示の生成物が存在する（例: `.github/instructions/speckit-workflow.instructions.md` または `.claude/rules/speckit-workflow.md`）
+
 ## 前提: superpowers の存在確認
 
 本ワークフローは [superpowers](https://github.com/obra/superpowers) 系スキル
@@ -55,7 +64,7 @@ PR を新規作成、または既存ブランチに push した後、**ユーザ
 `gh pr create` または `git push` の成功直後に本フローを開始する (ユーザー入力を待たない)。
 
 - **即時 1 回**: push 完了から約 2 分 (120 秒) 待機 (Copilot Review の初回反応待ち) し、§3.1 を 1 回実行する。
-- **追跡 (Claude Code)**: 指摘は遅延することがあるため、`ScheduleWakeup` でさらに 2 分後にもう 1 回フォローする。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
+- **追跡**: 指摘は遅延することがあるため、さらに約 2 分後にもう 1 回フォローする。Claude Code では `ScheduleWakeup` で予約する（下記）。それ以外の環境（copilot / codex 等）では手動で約 2 分後に検知を再実行する。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
 
   ```text
   ScheduleWakeup({ delaySeconds: 120,
@@ -67,7 +76,7 @@ PR を新規作成、または既存ブランチに push した後、**ユーザ
 
 ### 3.1 検知
 
-`gh api graphql` で未 resolve なレビュースレッドを列挙する (`gh pr view --json reviews,comments` は thread の `isResolved` を返さないので使わない)。owner / repo は `gh repo view --json nameWithOwner --jq .nameWithOwner` で動的に解決する。
+`gh api graphql` で未 resolve なレビュースレッドを列挙する (`gh pr view --json reviews,comments` は thread の `isResolved` を返さないので使わない)。owner / repo は次で動的に解決し、GraphQL には別変数で渡す: `OWNER=$(gh repo view --json owner --jq .owner.login)`、`REPO=$(gh repo view --json name --jq .name)`。
 
 レビュースレッド数が 100 を超える場合は、`reviewThreads` の `pageInfo { hasNextPage endCursor }` を見て `hasNextPage: true` の間 `after: $threadsCursor` を渡し、カーソル送りで全スレッドを取得する (下記は初回ページの取得例)。各スレッドの comments が 50 件を超える稀なケースは、そのスレッドを単位に別途ページングする — コメントのカーソルはスレッドごとに異なるため、全スレッド一括の単一 `commentsCursor` では正しく辿れない (下記の例では comments 側の cursor 変数は使わず、50 件超の検知だけ `comments.pageInfo.hasNextPage` で行う)。
 

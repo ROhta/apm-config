@@ -1,5 +1,5 @@
 ---
-description: Spec Kit による機能開発フローと Spec Kit × APM の連携運用
+description: Spec Kit 採用リポジトリの開発フロー（機能開発・PR 作成・レビュー応答）と Spec Kit × APM の連携運用
 applyTo: "**"
 ---
 
@@ -37,3 +37,78 @@ Spec Kit と APM はどちらも CLAUDE.md / AGENTS.md を生成しようとす�
 そのため本 speckit パッケージの **配信物には含めない**。各リポジトリがローカルに保持し
 (Spec Kit hook が生成・更新する)、`.apm/instructions/` の追跡対象として管理する。
 マーカー間は hook が自動更新するので手で編集しない。
+
+## ブランチとコミット
+
+- **`main` に直接コミットしない**。作業ごとにブランチを切る (例: `chore/...`、`NNN-feature-...`)。
+- コミットメッセージは Conventional Commits 形式 (`<type>(<scope>): <説明>`)、本文は日本語。
+- コミット末尾のトレーラ (`Co-Authored-By:` / `Claude-Session:`) は環境が自動付与する場合がある。リポジトリの方針に従い、付与しない運用なら手で削除する。
+
+## 実装完了 → PR 作成
+
+実装が完了したと判断したら、順に実行する。**前ステップが完了するまで次に進まない**（superpowers 系スキルは使わない）。
+
+1. **品質ゲートを完遂する**: typecheck / lint / format / test / build 等。具体的なコマンドは各リポジトリの setup 系 instructions に従う。失敗したら根本原因を解決してから次へ。
+2. ブランチを push し、PR を作成する。
+   - PR 本文は `.github/PULL_REQUEST_TEMPLATE.md` が存在すればその項目を埋める。
+   - チェックボックスはコミット前に検証済みの項目のみ `[x]`、Preview デプロイ待ちなど未確認のものは `[ ]` のまま残す。
+   - PR タイトルは Conventional Commits 形式で、本文と同じく日本語で書く。
+   - PR の assignee に、現在の `gh` CLI 認証ユーザーを設定する (`gh pr create --assignee @me`、または作成後に `gh pr edit <pr> --add-assignee @me`)。
+
+## PR レビュー応答ループ (PR 作成 / push 毎)
+
+PR を新規作成、または既存ブランチに push した後、**ユーザーからの合図を待たずに** 自走でレビュースレッドの有無を確認し、指摘があれば対応する。**すべてのスレッドが resolve されるまでループを継続する。** owner / repo は次で動的に解決し、GraphQL には別変数で渡す: `OWNER=$(gh repo view --json owner --jq .owner.login)`、`REPO=$(gh repo view --json name --jq .name)`。
+
+### 起動
+
+`gh pr create` または `git push` の成功直後に本フローを開始する (ユーザー入力を待たない)。
+
+- **即時 1 回**: push 完了から約 2 分 (120 秒) 待機 (Copilot Review の初回反応待ち) し、下記の検知を 1 回実行する。
+- **追跡**: 指摘は遅延することがあるため、さらに約 2 分後にもう 1 回フォローする。Claude Code では `ScheduleWakeup` で予約する。それ以外の環境（copilot / codex 等）では手動で約 2 分後に検知を再実行する。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
+- **ユーザー復帰時フォールバック**: 次にユーザー入力を受け取ったとき、その入力が PR と無関係に見えても、まず自分の未マージ PR の未 resolve スレッドを 1 回確認する。あれば「PR #<番号> に未対応のレビュースレッドがあります。先に応答しますか？」と確認し、了承されたら先に処理する。
+
+### 検知
+
+`gh api graphql` で未 resolve なレビュースレッドを列挙する (`gh pr view --json reviews` は `isResolved` を返さないので使わない)。
+
+```bash
+gh api graphql -f query='
+query($owner:String!,$repo:String!,$pr:Int!,$threadsCursor:String){
+  repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
+    reviewThreads(first:100, after:$threadsCursor){
+      pageInfo { hasNextPage endCursor }
+      nodes{
+        id            # resolveReviewThread の threadId に渡す Node ID
+        isResolved
+        comments(first:50){ nodes{
+          databaseId  # REST の comment_id（返信先）に渡す数値 ID
+          author{login} body path line
+        } }
+      } } } }
+}' -F owner=<owner> -F repo=<repo> -F pr=<番号>
+```
+
+スレッドが 100 件を超える場合は `pageInfo.hasNextPage` が `true` の間、`endCursor` を `after: $threadsCursor` に渡してカーソル送りで全件取得する。
+
+対象は `isResolved: false` かつ先頭コメント (`comments.nodes[0]`) の `author.login` が bot (例: `copilot-pull-request-reviewer`) のスレッドのみ。
+
+### 対応
+
+各指摘を「妥当（反映すべき）」「不当（誤読・二重指摘等）」に分類する。
+
+- **妥当**: コードを修正 → コミット → 該当インラインコメントに日本語で返信 (対応コミットの SHA を**前後に半角空白を入れて**記載) → スレッドを resolve。
+
+  ```bash
+  gh api repos/<owner>/<repo>/pulls/<pr>/comments/<databaseId>/replies -f body='対応しました abc1234 '
+  gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }' -F id=<thread_node_id>
+  ```
+
+  `<databaseId>` は数値 ID（GraphQL Node ID `PRRC_...` は REST で受け付けられない）。
+- **不当**: コードは変更せず、理由を日本語で具体的に記載してスレッドを resolve。
+
+全スレッドを resolve するまで繰り返し、次の `git push` で再度検知から実行する。
+
+## 関連ルール
+
+- レビュー応答の文章ルール: 共通パッケージ `ROhta/apm-config/base` の pr-review ルールから配信。生成物は `.github/instructions/pr-review.instructions.md` / `.claude/rules/pr-review.md`。
+- 環境構築・コマンドは各リポジトリの setup 系 instructions を参照。

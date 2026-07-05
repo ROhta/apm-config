@@ -1,5 +1,5 @@
 name: apm-config-base
-version: 1.1.0
+version: 1.2.0
 description: ROhta 全リポジトリ共通の AI エージェント指示（言語・PR レビュー）と superpowers スキル
 author: ROhta
 license: GPL-3.0-or-later
