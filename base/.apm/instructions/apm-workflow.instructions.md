@@ -33,6 +33,8 @@ APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:m
 | `.codex/config.toml` | `apm install` で生成 (Codex CLI MCP 設定) | ❌ 追跡しない |
 | `apm_modules/`, `.agents/skills/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `.claude/settings.json`, `.claude/apm-hooks.json`, `.github/prompts/`, `.github/hooks/` | `apm install` で生成 (APM プラグイン展開先) | ❌ 追跡しない |
 
+> **Spec Kit 採用リポジトリの上書き**: Spec Kit 採用リポジトリでは一部のファイル管理が上表と異なる（例: `.claude/skills/` は Spec Kit スキルのため **追跡する**）。詳細は speckit-workflow の「ファイル管理（Spec Kit 固有）」を参照。
+
 ## ローカルでの作業
 
 `.apm/instructions/` または `apm.yml` を編集後、ローカルで以下を実行することで生成物が更新される (任意)。

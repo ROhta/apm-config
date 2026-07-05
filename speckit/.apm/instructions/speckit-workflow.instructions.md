@@ -38,6 +38,15 @@ Spec Kit と APM はどちらも CLAUDE.md / AGENTS.md を生成しようとす�
 (Spec Kit hook が生成・更新する)、`.apm/instructions/` の追跡対象として管理する。
 マーカー間は hook が自動更新するので手で編集しない。
 
+## ファイル管理（Spec Kit 固有）
+
+base の apm-workflow「ファイルの管理方針」を基本としつつ、Spec Kit 採用リポジトリでは以下を **上書き** する。
+
+- `.claude/skills/*`: **追跡する**（Spec Kit のスキル本体。APM 生成物ではない）。base では「追跡しない」だが Spec Kit リポジトリでは逆になる。
+- `.gitignore` は `.claude/` を丸ごと無視せず、生成物である `.claude/rules/` のみ無視する（`.claude/skills/` を追跡対象に残すため）。
+- `spec-context.instructions.md`: 追跡する（動的だがローカル保持。上記「spec-context.instructions.md の扱い」参照）。
+- `CLAUDE.md`: `apm compile` が constitution 込み（`--with-constitution`）で生成する生成物（追跡しない）。
+
 ## ブランチとコミット
 
 - **`main` に直接コミットしない**。作業ごとにブランチを切る (例: `chore/...`、`NNN-feature-...`)。
