@@ -13,7 +13,7 @@ applyTo: ".apm/**"
 
 ## APM CLI 本体のバージョン
 
-APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:microsoft/apm`) を SSoT として管理する。更新は `mise.toml` の version を上げて `mise install` する。`apm self-update` や `apm doctor` の更新催促には従わない (mise 管理外のグローバルインストールを増やさないため)。ROhta の各リポジトリは apm **0.23.1** で揃える。
+APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:microsoft/apm`) を SSoT として管理する。更新は `mise.toml` の version を上げて `mise install` する。`apm self-update` や `apm doctor` の更新催促には従わない (mise 管理外のグローバルインストールを増やさないため)。ROhta の各リポジトリは apm **0.24.0** で揃える。
 
 ## ファイルの管理方針
 
