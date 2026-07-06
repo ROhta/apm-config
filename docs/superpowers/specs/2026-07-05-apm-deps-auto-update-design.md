@@ -57,7 +57,7 @@ git 依存の追従を `microsoft/apm-action` に委ねられる点が再設計�
 | 実装方式 | **apm-action ハイブリッド**: `dependencies.apm` 2 件を apm-action `update:true`、`dependencies.mcp` 2 件を独自スクリプト、PR は `peter-evans/create-pull-request` |
 | apm CLI 版 | apm-action の `apm-version` を **0.24.0** に明示 pin（base の apm-workflow instructions の統一版を SSoT として追従。既定 0.14.0 のまま使わない） |
 | pin 形式 | git 依存は commit SHA ピンを維持（0.24.0 の apm update が最新 release tag → SHA に自動書換）。context7 は npm の exact version ピンを維持（独自スクリプト） |
-| **lockfile** | `apm update` は `apm.lock.yaml` を生成・更新するため、**base/ と mcp-toolkit/ に `apm.lock.yaml` を新規導入しコミットする**（現状「lockfile ゼロ」からの構成変更。★要明示承認） |
+| **lockfile** | `apm update` は `apm.lock.yaml` を生成・更新するため、**base/ と mcp-toolkit/ に `apm.lock.yaml` を新規導入しコミットする**（現状「lockfile ゼロ」からの構成変更。**ユーザー承認済み 2026-07-06**） |
 | 展開物 | `apm update` の post-install（compile/deploy）が生成する依存 primitive の展開ツリーはコミットしない。**コミット対象を `apm.yml` + `apm.lock.yaml` に限定** |
 | 「最新」の定義 | git 依存は最新 release tag を commit SHA に解決（main HEAD 追従はしない）。context7 は `npm view` の最新版 |
 | トリガー頻度 | 週次（cron）+ 手動実行 |
@@ -89,13 +89,28 @@ git 依存の追従を `microsoft/apm-action` に委ねられる点が再設計�
 
 ## 5. 更新ロジック
 
+### 5.0 実行順序（重要 — lockfile 整合のため固定）
+
+`mcp-toolkit/` は **apm-action 管理（chrome-devtools）と独自管理（context7 / serena）が
+同一ファイル・同一 lockfile に同居**する。`apm update` は実行時点の `apm.yml` から
+`apm.lock.yaml` を生成するため、順序を誤ると lockfile が古い pin を捕捉して apm.yml と
+ドリフトする。したがって順序を次に固定する:
+
+1. **独自スクリプト（§5.2）を先に実行** — `mcp-toolkit/apm.yml` の context7 / serena を書き換える。
+2. **その後 apm-action `update:true`（§5.1）** を base/ と mcp-toolkit/ で実行 — 更新後の
+   `apm.yml` から `apm.lock.yaml` を生成し、chrome-devtools / superpowers の SHA も追従する。
+
+これにより mcp-toolkit の lockfile が context7 / serena の新 pin を捕捉し、
+apm.yml ↔ lockfile の整合が保たれる（base は独自対象なしのため順序非依存）。
+
 ### 5.1 apm-action による `dependencies.apm` 更新（superpowers / chrome-devtools）
 
-`base/` と `mcp-toolkit/` それぞれで `microsoft/apm-action@v1` を `update: true` で実行する
-（`working-directory` で切り替え。2 ステップまたは matrix）。
+`base/` と `mcp-toolkit/` それぞれで `microsoft/apm-action` を `update: true` で実行する
+（`working-directory` で切り替え。2 ステップまたは matrix）。Action は §7 のとおり
+commit SHA で固定する（下の例はバージョン可読性のため tag 表記）。
 
 ```yaml
-- uses: microsoft/apm-action@v1
+- uses: microsoft/apm-action@<sha>   # v1.x を SHA 固定（§7）
   with:
     working-directory: base          # と mcp-toolkit を別ステップ/matrix で
     apm-version: "0.24.0"
@@ -149,7 +164,7 @@ git 依存の追従を `microsoft/apm-action` に委ねられる点が再設計�
 - **コミット対象を `base/apm.yml` / `mcp-toolkit/apm.yml` / 各 `apm.lock.yaml` に限定**。
   apm update が展開した依存 primitive ツリーは add しない（`.gitignore` もしくは
   `git add` の明示指定で除外）。
-- **`peter-evans/create-pull-request@v6`** を使用。
+- **`peter-evans/create-pull-request`** を使用（§7 のとおり commit SHA 固定、v6.x）。
   - `branch: chore/apm-deps-update`（固定ブランチ＝毎回同じ PR をローリング更新）。
   - `commit-message` / `title`: `chore(deps): apm 依存 pin を更新`（日本語 + Conventional Commits）。
   - `labels: dependencies`（§4 の前提で作成するラベル）。
@@ -173,6 +188,11 @@ permissions:
 
 - apm-action は `apm-version: "0.24.0"` を明示 pin（base の apm-workflow instructions の
   統一版に追従。統一版が上がったらこの pin も追従して更新する）。
+- **サードパーティ Action は commit SHA で固定**する。`microsoft/apm-action` /
+  `peter-evans/create-pull-request` を major tag（`@v1` / `@v6`）のまま使わず、解決済み
+  commit SHA に pin し対応バージョン（`apm-action v1.x` / `create-pull-request v6.x`）を
+  コメント併記する。本リポジトリの「依存は SHA ピン」方針と揃え、upstream 更新で PR 自動
+  生成挙動が変わる余地を排除する。SHA の更新は本ワークフローの対象外（手動 / 別途 Dependabot）。
 - 既定 `GITHUB_TOKEN` で PR 作成。`GITHUB_TOKEN` 製 PR は `on: pull_request` を再帰起動しないが、
   CodeRabbit は GitHub App（webhook 駆動）なのでレビューは走る。将来 Actions ベースの PR CI を
   bot PR でも起動したい場合は PAT / GitHub App token へ切替（拡張点）。
@@ -215,6 +235,7 @@ permissions:
 | --- | --- |
 | 上流が annotated release を出さず main のみ進む依存が将来現れる | 現状 4 依存はすべて GitHub Releases あり。apm update / 独自スクリプトとも release 起点。release 不在は skip + warn し、必要時に追従源を個別再検討 |
 | `apm update` の展開物が誤ってコミットされる | コミット対象を `apm.yml` + `apm.lock.yaml` に限定（§6）。初回 CI で展開物が混ざらないことを確認（§10） |
+| apm-action が独自スクリプトの後に `mcp-toolkit/apm.yml` を再整形しコメントが churn する | 実行順序を §5.0 で固定（独自 → apm-action）済みで**値の整合は保たれる**。コメント保持は apm update の manifest 再書き込み挙動次第のため、初回 CI で mcp-toolkit のコメント差分を確認し、churn するなら許容 / 別途対処（値は正）を判断 |
 | 独自スクリプトの regex が上流記法変更で外れる | §5.2 の fail-fast（anchor が 1 回マッチしなければ非ゼロ終了）で「差分ゼロ成功」の見逃しを防ぐ。dry-run / 冪等性テストでも検知 |
 | chrome-devtools（transitive MCP）の trust 未承認で検証が不完全 | 更新ジョブ自体は非ブロッキング（§8）。実展開検証を入れる場合のみ `apm approve` を事前シード |
 | lockfile 導入で consumer 側に影響 | apm-config の lockfile は producer 内部の解決記録。consumer は従来どおり自リポジトリの lockfile で解決するため影響なし |
