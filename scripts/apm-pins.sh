@@ -12,6 +12,8 @@ CONTEXT7_RE='@upstash/context7-mcp@[0-9]+\.[0-9]+\.[0-9]+'
 SERENA_RE='github\.com/oraios/serena@[0-9a-f]{40}'
 CHROME_RE='chrome-devtools-mcp#[0-9a-f]{40}'
 SUPER_RE='obra/superpowers#[0-9a-f]{40}'
+# chrome-devtools のバージョンを書き添えた人間向けコメント（fail-fast 対象外・best-effort 同期）
+CHROME_COMMENT_RE='chrome-devtools-mcp@[0-9]+\.[0-9]+\.[0-9]+'
 
 die(){ echo "ERROR: $*" >&2; exit 3; }
 # grep は 0 マッチで exit 1 になるため、set -euo pipefail 下でも中断しないよう吸収する
@@ -27,32 +29,79 @@ resolve_serena(){
   [ -z "$tag" ] && return
   gh api "repos/oraios/serena/commits/$tag" --jq .sha 2>/dev/null || true
 }
+resolve_superpowers(){
+  if [ -n "${APM_PINS_SUPERPOWERS_SHA:-}" ]; then echo "$APM_PINS_SUPERPOWERS_SHA"; return; fi
+  local tag; tag="$(gh api repos/obra/superpowers/releases/latest --jq .tag_name 2>/dev/null || true)"
+  [ -z "$tag" ] && return
+  gh api "repos/obra/superpowers/commits/$tag" --jq .sha 2>/dev/null || true
+}
+# chrome-devtools-mcp は lightweight tag（annotated ではない）で release されているため
+# `gh api .../commits/<tag>` で tag 種別非依存に解決する。tag 自体も返す
+# ("<tag>\t<sha>" 形式) のは、コメント中のバージョン表記(chrome-devtools-mcp@X.Y.Z) を
+# best-effort で同期するため（呼び出し元はコマンド置換のサブシェルを経由するので、
+# ここでグローバル変数に代入しても呼び出し元には伝播しない）。
+# ただし APM_PINS_CHROME_SHA で override するパスでは tag は空文字のまま返る
+# （"\t<sha>" 形式）ため、その場合コメント同期は呼び出し元で skip される。
+resolve_chrome(){
+  if [ -n "${APM_PINS_CHROME_SHA:-}" ]; then printf '\t%s\n' "$APM_PINS_CHROME_SHA"; return; fi
+  local tag; tag="$(gh api repos/ChromeDevTools/chrome-devtools-mcp/releases/latest --jq .tag_name 2>/dev/null || true)"
+  [ -z "$tag" ] && { printf '\t\n'; return; }
+  local sha; sha="$(gh api "repos/ChromeDevTools/chrome-devtools-mcp/commits/$tag" --jq .sha 2>/dev/null || true)"
+  printf '%s\t%s\n' "$tag" "$sha"
+}
 
 cmd_update(){
   local dry=0; [ "${1:-}" = "--dry-run" ] && dry=1
 
   # fail-fast(1): 各 anchor はちょうど 1 回マッチすること
+  [ "$(count "$SUPER_RE" "$BASE_FILE")" = "1" ] || die "superpowers anchor not found exactly once in $BASE_FILE"
+  [ "$(count "$CHROME_RE" "$MCP_FILE")" = "1" ] || die "chrome-devtools anchor not found exactly once in $MCP_FILE"
   [ "$(count "$CONTEXT7_RE" "$MCP_FILE")" = "1" ] || die "context7 anchor not found exactly once in $MCP_FILE"
   [ "$(count "$SERENA_RE" "$MCP_FILE")" = "1" ] || die "serena anchor not found exactly once in $MCP_FILE"
 
   # fail-fast(2): 最新版の解決失敗は silent skip せず非ゼロ終了
-  local c7 sr
+  local sp chrome_out chrome_tag ch c7 sr
+  sp="$(resolve_superpowers)"; [ -n "$sp" ] || die "failed to resolve superpowers sha (gh api)"
+  chrome_out="$(resolve_chrome)"
+  chrome_tag="${chrome_out%%$'\t'*}"
+  ch="${chrome_out#*$'\t'}"
+  [ -n "$ch" ] || die "failed to resolve chrome-devtools sha (gh api)"
   c7="$(resolve_context7)"; [ -n "$c7" ] || die "failed to resolve context7 version (npm view)"
   sr="$(resolve_serena)"; [ -n "$sr" ] || die "failed to resolve serena sha (gh api)"
 
   # fail-fast(3): 解決値の形式検証（不正値で apm.yml を汚さない）
+  printf '%s' "$sp" | grep -qE '^[0-9a-f]{40}$' || die "resolved superpowers sha has unexpected format: $sp"
+  printf '%s' "$ch" | grep -qE '^[0-9a-f]{40}$' || die "resolved chrome-devtools sha has unexpected format: $ch"
   printf '%s' "$c7" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || die "resolved context7 version has unexpected format: $c7"
   printf '%s' "$sr" | grep -qE '^[0-9a-f]{40}$' || die "resolved serena sha has unexpected format: $sr"
 
-  local work; work="$(mktemp)"; cp "$MCP_FILE" "$work"
-  perl -i -pe 's{(\@upstash/context7-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$c7"'}g' "$work"
-  perl -i -pe 's{(github\.com/oraios/serena\@)[0-9a-f]{40}}{${1}'"$sr"'}g' "$work"
+  local base_work mcp_work
+  base_work="$(mktemp)"; cp "$BASE_FILE" "$base_work"
+  mcp_work="$(mktemp)"; cp "$MCP_FILE" "$mcp_work"
+
+  perl -i -pe 's{(obra/superpowers#)[0-9a-f]{40}}{${1}'"$sp"'}g' "$base_work"
+  perl -i -pe 's{(chrome-devtools-mcp#)[0-9a-f]{40}}{${1}'"$ch"'}g' "$mcp_work"
+  perl -i -pe 's{(\@upstash/context7-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$c7"'}g' "$mcp_work"
+  perl -i -pe 's{(github\.com/oraios/serena\@)[0-9a-f]{40}}{${1}'"$sr"'}g' "$mcp_work"
+
+  # chrome-devtools のバージョンコメント同期 (best-effort): tag から X.Y.Z を抽出できて、
+  # かつコメントの anchor が存在する場合のみ置換。どちらか欠けても fail-fast せず no-op
+  if [ -n "$chrome_tag" ]; then
+    local chrome_ver
+    chrome_ver="$(printf '%s' "$chrome_tag" | sed -E 's/.*v//')"
+    if printf '%s' "$chrome_ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+      && grep -qE "$CHROME_COMMENT_RE" "$mcp_work"; then
+      perl -i -pe 's{(chrome-devtools-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$chrome_ver"'}g' "$mcp_work"
+    fi
+  fi
 
   if [ "$dry" = "1" ]; then
-    diff -u "$MCP_FILE" "$work" || true
-    rm -f "$work"
+    diff -u "$BASE_FILE" "$base_work" || true
+    diff -u "$MCP_FILE" "$mcp_work" || true
+    rm -f "$base_work" "$mcp_work"
   else
-    mv "$work" "$MCP_FILE"
+    mv "$base_work" "$BASE_FILE"
+    mv "$mcp_work" "$MCP_FILE"
   fi
 }
 
