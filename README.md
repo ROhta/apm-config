@@ -55,6 +55,11 @@ apm compile                          # AGENTS.md 等を生成
 
 ## 更新フロー
 
+上流依存 pin（superpowers / chrome-devtools / serena / context7）の追従は
+`.github/workflows/apm-update.yml` が**週次（月曜）+ 手動**で自動化する。更新があれば
+`chore/apm-deps-update` ブランチにローリング PR を作るので、通常は手動編集不要。
+手動で追従・確認したい場合は以下の従来手順も使える。
+
 1. 本リポジトリの `base/` や `mcp-toolkit/` を編集し、ブランチ + PR でマージ。
    - context7 / serena は `dependencies.mcp` のバージョン / コミット SHA を直接編集して pin を上げる。
    - chrome-devtools はプラグイン参照リポジトリ（`ChromeDevTools/chrome-devtools-mcp`）の
