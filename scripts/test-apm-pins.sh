@@ -65,5 +65,18 @@ printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fa2"
 "$SCRIPT" bump-version "$fa2" "$fb2" >/dev/null
 grep -q '^version: 3.0.5$' "$fa2" && ok "no bump when unchanged" || ng "no bump when unchanged"
 
+# 7. render-body: 変化した pin だけ表に出る
+BD="$TMP/before"; mkdir -p "$BD"
+make_mcp "$BD/mcp.apm.yml"
+printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%s\n' \
+  d884ae04edebef577e82ff7c4e143debd0bbec99 > "$BD/base.apm.yml"
+# 現在ファイル: context7 のみ更新済み、superpowers は据え置き
+curmcp="$TMP/cur_mcp.yml"; curbase="$TMP/cur_base.yml"
+make_mcp "$curmcp"; perl -i -pe 's/context7-mcp\@3\.2\.0/context7-mcp\@3.2.2/' "$curmcp"
+cp "$BD/base.apm.yml" "$curbase"
+out="$(APM_BASE_FILE="$curbase" APM_MCP_FILE="$curmcp" "$SCRIPT" render-body "$BD")"
+echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2' && ok "render-body shows changed context7" || ng "render-body shows changed context7"
+echo "$out" | grep -q 'superpowers' && ng "render-body must omit unchanged superpowers" || ok "render-body omits unchanged"
+
 echo "== $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]

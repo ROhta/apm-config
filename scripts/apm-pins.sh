@@ -62,8 +62,37 @@ cmd_bump_version(){
   perl -i -pe 'BEGIN{$d=0} if(!$d && /^version:\s*\S+/){s/^version:\s*\S+/version: '"$new"'/; $d=1}' "$file"
 }
 
+# 指定ファイル群から 4 pin を "key<TAB>value" で出力
+_pins(){ # base-file mcp-file
+  local bf="$1" mf="$2"
+  local s c ct se
+  s="$(grep -oE "$SUPER_RE" "$bf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
+  c="$(grep -oE "$CHROME_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
+  ct="$(grep -oE "$CONTEXT7_RE" "$mf" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  se="$(grep -oE "$SERENA_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
+  printf 'superpowers\t%s\nchrome-devtools\t%s\ncontext7\t%s\nserena\t%s\n' "$s" "$c" "$ct" "$se"
+}
+_short(){ case "$1" in [0-9a-f]*) printf '%.7s' "$1";; *) printf '%s' "$1";; esac; }
+
+cmd_render_body(){
+  local bd="$1"
+  local before after key ov nv rows=""
+  before="$(_pins "$bd/base.apm.yml" "$bd/mcp.apm.yml")"
+  after="$(_pins "$BASE_FILE" "$MCP_FILE")"
+  while IFS=$'\t' read -r key ov; do
+    nv="$(echo "$after" | awk -F'\t' -v k="$key" '$1==k{print $2}')"
+    if [ "$ov" != "$nv" ]; then
+      rows="$rows| $key | \`$(_short "$ov")\` | \`$(_short "$nv")\` |
+"
+    fi
+  done <<<"$before"
+  if [ -z "$rows" ]; then echo "apm 依存 pin の更新はありません。"; return; fi
+  printf '## apm 依存 pin 更新\n\n| 依存 | 変更前 | 変更後 |\n| --- | --- | --- |\n%s' "$rows"
+}
+
 case "${1:-}" in
   update) shift; cmd_update "$@";;
   bump-version) shift; cmd_bump_version "$@";;
+  render-body) shift; cmd_render_body "$@";;
   *) die "usage: apm-pins.sh update [--dry-run]";;
 esac
