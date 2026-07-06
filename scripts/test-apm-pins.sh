@@ -139,5 +139,16 @@ else
   ok "fail-fast when context7 anchor matches more than once"
 fi
 
+# 12. fail-fast: context7 が厳密 semver でない値（prerelease 等）に解決されると非ゼロ終了
+#     （2 回目の実行で prerelease サフィックスが複製されるバグの回帰テスト。
+#      不正値は書き込み前に die するべきで、複製が起きること自体がここでは検知不能な
+#      ほど致命的なので、1 回目の update 呼び出しが非ゼロ終了することを確認する）
+f12="$TMP/mcp12.yml"; make_mcp "$f12"
+if APM_MCP_FILE="$f12" APM_PINS_CONTEXT7_VERSION=3.2.2-beta.1 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null 2>&1; then
+  ng "fail-fast on non-strict-semver context7 version"
+else
+  ok "fail-fast on non-strict-semver context7 version"
+fi
+
 echo "== $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]

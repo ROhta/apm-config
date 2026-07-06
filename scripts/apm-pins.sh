@@ -40,7 +40,7 @@ cmd_update(){
   sr="$(resolve_serena)"; [ -n "$sr" ] || die "failed to resolve serena sha (gh api)"
 
   # fail-fast(3): 解決値の形式検証（不正値で apm.yml を汚さない）
-  printf '%s' "$c7" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+' || die "resolved context7 version has unexpected format: $c7"
+  printf '%s' "$c7" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || die "resolved context7 version has unexpected format: $c7"
   printf '%s' "$sr" | grep -qE '^[0-9a-f]{40}$' || die "resolved serena sha has unexpected format: $sr"
 
   local work; work="$(mktemp)"; cp "$MCP_FILE" "$work"
