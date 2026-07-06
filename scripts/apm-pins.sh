@@ -39,6 +39,10 @@ cmd_update(){
   c7="$(resolve_context7)"; [ -n "$c7" ] || die "failed to resolve context7 version (npm view)"
   sr="$(resolve_serena)"; [ -n "$sr" ] || die "failed to resolve serena sha (gh api)"
 
+  # fail-fast(3): 解決値の形式検証（不正値で apm.yml を汚さない）
+  printf '%s' "$c7" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+' || die "resolved context7 version has unexpected format: $c7"
+  printf '%s' "$sr" | grep -qE '^[0-9a-f]{40}$' || die "resolved serena sha has unexpected format: $sr"
+
   local work; work="$(mktemp)"; cp "$MCP_FILE" "$work"
   perl -i -pe 's{(\@upstash/context7-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$c7"'}g' "$work"
   perl -i -pe 's{(github\.com/oraios/serena\@)[0-9a-f]{40}}{${1}'"$sr"'}g' "$work"
@@ -72,7 +76,7 @@ _pins(){ # base-file mcp-file
   se="$(grep -oE "$SERENA_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
   printf 'superpowers\t%s\nchrome-devtools\t%s\ncontext7\t%s\nserena\t%s\n' "$s" "$c" "$ct" "$se"
 }
-_short(){ case "$1" in [0-9a-f]*) printf '%.7s' "$1";; *) printf '%s' "$1";; esac; }
+_short(){ if printf '%s' "$1" | grep -qE '^[0-9a-f]{40}$'; then printf '%.7s' "$1"; else printf '%s' "$1"; fi; }
 
 cmd_render_body(){
   local bd="$1"
@@ -94,5 +98,5 @@ case "${1:-}" in
   update) shift; cmd_update "$@";;
   bump-version) shift; cmd_bump_version "$@";;
   render-body) shift; cmd_render_body "$@";;
-  *) die "usage: apm-pins.sh update [--dry-run]";;
+  *) die "usage: apm-pins.sh update [--dry-run] | bump-version <file> <before-file> | render-body <before-dir>";;
 esac

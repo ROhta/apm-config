@@ -78,5 +78,66 @@ out="$(APM_BASE_FILE="$curbase" APM_MCP_FILE="$curmcp" "$SCRIPT" render-body "$B
 echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2' && ok "render-body shows changed context7" || ng "render-body shows changed context7"
 echo "$out" | grep -q 'superpowers' && ng "render-body must omit unchanged superpowers" || ok "render-body omits unchanged"
 
+# 8. render-body: context7 のバージョンが 7 文字超でも切り詰められない（_short() の版数バグ回帰）
+BD8="$TMP/before8"; mkdir -p "$BD8"
+make_mcp "$BD8/mcp.apm.yml"
+printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%s\n' \
+  d884ae04edebef577e82ff7c4e143debd0bbec99 > "$BD8/base.apm.yml"
+curmcp8="$TMP/cur_mcp8.yml"; curbase8="$TMP/cur_base8.yml"
+make_mcp "$curmcp8"; perl -i -pe 's/context7-mcp\@3\.2\.0/context7-mcp\@13.20.30/' "$curmcp8"
+cp "$BD8/base.apm.yml" "$curbase8"
+out8="$(APM_BASE_FILE="$curbase8" APM_MCP_FILE="$curmcp8" "$SCRIPT" render-body "$BD8")"
+if echo "$out8" | grep -qE '`13\.20\.30`' && ! echo "$out8" | grep -qE '`13\.20\.3`'; then
+  ok "render-body keeps long version intact (no truncation)"
+else
+  ng "render-body keeps long version intact (no truncation)"
+fi
+
+# 9. fail-fast: npm/gh が空応答でも silent skip せず非ゼロ終了（ネットワーク不要）
+STUBDIR="$TMP/stubbin"; mkdir -p "$STUBDIR"
+cat > "$STUBDIR/npm" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat > "$STUBDIR/gh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$STUBDIR/npm" "$STUBDIR/gh"
+f9="$TMP/mcp9.yml"; make_mcp "$f9"
+if ( PATH="$STUBDIR:$PATH"; unset APM_PINS_CONTEXT7_VERSION APM_PINS_SERENA_SHA; APM_MCP_FILE="$f9" "$SCRIPT" update >/dev/null 2>&1 ); then
+  ng "fail-fast when resolution is empty (no silent skip)"
+else
+  ok "fail-fast when resolution is empty (no silent skip)"
+fi
+
+# 10. render-body: SHA 系 pin (chrome-devtools) が変化した行だけ出て、SHA は 7 桁に短縮される
+BD10="$TMP/before10"; mkdir -p "$BD10"
+make_mcp "$BD10/mcp.apm.yml"
+printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%s\n' \
+  d884ae04edebef577e82ff7c4e143debd0bbec99 > "$BD10/base.apm.yml"
+SHA_OLD=913308263bdc8042af74924b68dc39a374ad071d
+SHA_NEW=4444444444444444444444444444444444444444
+curmcp10="$TMP/cur_mcp10.yml"; curbase10="$TMP/cur_base10.yml"
+make_mcp "$curmcp10"; perl -i -pe "s/$SHA_OLD/$SHA_NEW/" "$curmcp10"
+cp "$BD10/base.apm.yml" "$curbase10"
+out10="$(APM_BASE_FILE="$curbase10" APM_MCP_FILE="$curmcp10" "$SCRIPT" render-body "$BD10")"
+if echo "$out10" | grep -qE '\| chrome-devtools \| `9133082` \| `4444444` \|' \
+  && ! echo "$out10" | grep -q "$SHA_OLD" \
+  && ! echo "$out10" | grep -q "$SHA_NEW"; then
+  ok "render-body shows changed SHA pin, 7-char shortened"
+else
+  ng "render-body shows changed SHA pin, 7-char shortened"
+fi
+
+# 11. fail-fast: context7 anchor が 2 回マッチすると非ゼロ終了
+f11="$TMP/mcp11.yml"; make_mcp "$f11"
+printf '\n  # duplicate anchor for test\n  - "@upstash/context7-mcp@3.2.0"\n' >> "$f11"
+if APM_MCP_FILE="$f11" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null 2>&1; then
+  ng "fail-fast when context7 anchor matches more than once"
+else
+  ok "fail-fast when context7 anchor matches more than once"
+fi
+
 echo "== $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]
