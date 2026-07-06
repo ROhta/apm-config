@@ -79,7 +79,7 @@ git 依存の追従を `microsoft/apm-action` に委ねられる点が再設計�
 | 追加物 | 役割 |
 | --- | --- |
 | `.github/workflows/apm-update.yml` | トリガー・権限・apm-action 呼び出し・独自スクリプト実行・PR 作成のオーケストレーション |
-| `scripts/update-apm-pins.sh` | **context7 / serena のみ**の最新解決 + `mcp-toolkit/apm.yml` 書き換え + PR 本文断片生成。ローカル実行・`--dry-run` 対応 |
+| `scripts/apm-pins.sh` | **context7 / serena のみ**の最新解決 + `mcp-toolkit/apm.yml` 書き換え + PR 本文断片生成。ローカル実行・`--dry-run` 対応 |
 | `base/apm.lock.yaml` / `mcp-toolkit/apm.lock.yaml` | apm-action `update:true` が生成・更新する lockfile。初回にコミットして以降追跡 |
 | （リポジトリ設定）Actions の "Allow GitHub Actions to create and approve pull requests" 有効化 | bot による PR 作成の前提 |
 | （リポジトリ設定）`dependencies` ラベルの作成（`gh label create dependencies`） | apm-config は現状デフォルトラベルのみ。PR 付与前に一度だけ作成する前提 |
@@ -133,7 +133,7 @@ commit SHA で固定する（下の例はバージョン可読性のため tag �
 
 ### 5.2 独自スクリプトによる command/args 埋め込み版更新（context7 / serena）
 
-`scripts/update-apm-pins.sh` が `mcp-toolkit/apm.yml` の 2 件を更新する。
+`scripts/apm-pins.sh` が `mcp-toolkit/apm.yml` の 2 件を更新する。
 
 1. **context7**（npm）
    - `ver=$(npm view @upstash/context7-mcp version)`
@@ -146,13 +146,13 @@ commit SHA で固定する（下の例はバージョン可読性のため tag �
 堅牢性:
 
 - `/commits/<ref>` エンドポイント解決で annotated / lightweight tag の差を吸収。
-- release / npm 版が**取得できない場合のみ** skip + warn し他方の処理を継続する。
 - 置換は **anchored regex（perl）で対象文字列のみ外科的に**行い、コメント・整形を完全保持。
-- **置換の fail-fast**: managed な 2 依存それぞれについて、書き換え前に現在の pin（anchor）が
-  対象ファイルに**ちょうど 1 回**マッチすることを検証する。0 回 / 複数回マッチなら manifest
-  形状変化と見なし**非ゼロ終了で失敗**させる（「regex が外れても差分ゼロで成功扱いになり
-  週次更新が静かに止まる」事故を防ぐ）。release / npm 版取得不可（skip + warn）と anchor
-  不一致（error）は明確に区別する。
+- **異常は fail-fast（すべて非ゼロ終了）**: (1) 書き換え前に現在の pin（anchor）が対象ファイルに
+  **ちょうど 1 回**マッチすることを検証し、0 回 / 複数回なら manifest 形状変化と見なし失敗。
+  (2) context7 / serena の最新版（`npm view` / `gh api`）が**取得できない場合も skip せず失敗**する。
+  context7 / serena は常に存在するため、解決失敗は実障害（ネットワーク / API 断）であり、
+  silent に更新が止まるのを防ぐため CI を赤くして再実行・通知に繋げる。「regex が外れても
+  差分ゼロで成功扱い」「ソース断で無言スキップ」という見逃しを両方排除する。
 
 ## 6. 変更検知と PR
 
@@ -164,7 +164,7 @@ commit SHA で固定する（下の例はバージョン可読性のため tag �
 - **コミット対象を `base/apm.yml` / `mcp-toolkit/apm.yml` / 各 `apm.lock.yaml` に限定**。
   apm update が展開した依存 primitive ツリーは add しない（`.gitignore` もしくは
   `git add` の明示指定で除外）。
-- **`peter-evans/create-pull-request`** を使用（§7 のとおり commit SHA 固定、v6.x）。
+- **`peter-evans/create-pull-request`** を使用（§7 のとおり commit SHA 固定、v8.x）。
   - `branch: chore/apm-deps-update`（固定ブランチ＝毎回同じ PR をローリング更新）。
   - `commit-message` / `title`: `chore(deps): apm 依存 pin を更新`（日本語 + Conventional Commits）。
   - `labels: dependencies`（§4 の前提で作成するラベル）。
@@ -189,8 +189,8 @@ permissions:
 - apm-action は `apm-version: "0.24.0"` を明示 pin（base の apm-workflow instructions の
   統一版に追従。統一版が上がったらこの pin も追従して更新する）。
 - **サードパーティ Action は commit SHA で固定**する。`microsoft/apm-action` /
-  `peter-evans/create-pull-request` を major tag（`@v1` / `@v6`）のまま使わず、解決済み
-  commit SHA に pin し対応バージョン（`apm-action v1.x` / `create-pull-request v6.x`）を
+  `peter-evans/create-pull-request` を major tag（`@v1` / `@v8`）のまま使わず、解決済み
+  commit SHA に pin し対応バージョン（`apm-action v1.x` / `create-pull-request v8.x`）を
   コメント併記する。本リポジトリの「依存は SHA ピン」方針と揃え、upstream 更新で PR 自動
   生成挙動が変わる余地を排除する。SHA の更新は本ワークフローの対象外（手動 / 別途 Dependabot）。
 - 既定 `GITHUB_TOKEN` で PR 作成。`GITHUB_TOKEN` 製 PR は `on: pull_request` を再帰起動しないが、
@@ -219,7 +219,7 @@ permissions:
 
 ## 10. テスト観点
 
-- **独自スクリプト dry-run**: `./scripts/update-apm-pins.sh --dry-run` で書き換え差分を表示。
+- **独自スクリプト dry-run**: `./scripts/apm-pins.sh update --dry-run` で書き換え差分を表示。
   現時点で **context7 `3.2.0 → 3.2.2` が検知される**（検証可能な実ケース）。
 - **anchor 不一致時の fail-fast**: managed 依存の anchor をわざと変えた fixture でスクリプトが
   非ゼロ終了すること。
@@ -233,7 +233,7 @@ permissions:
 
 | リスク | 対処 |
 | --- | --- |
-| 上流が annotated release を出さず main のみ進む依存が将来現れる | 現状 4 依存はすべて GitHub Releases あり。apm update / 独自スクリプトとも release 起点。release 不在は skip + warn し、必要時に追従源を個別再検討 |
+| 上流が annotated release を出さず main のみ進む依存が将来現れる | 現状 4 依存はすべて GitHub Releases あり。apm update / 独自スクリプトとも release 起点。解決不能時は**非ゼロ終了で可視化**し、必要時に追従源を個別再検討（silent skip はしない） |
 | `apm update` の展開物が誤ってコミットされる | コミット対象を `apm.yml` + `apm.lock.yaml` に限定（§6）。初回 CI で展開物が混ざらないことを確認（§10） |
 | apm-action が独自スクリプトの後に `mcp-toolkit/apm.yml` を再整形しコメントが churn する | 実行順序を §5.0 で固定（独自 → apm-action）済みで**値の整合は保たれる**。コメント保持は apm update の manifest 再書き込み挙動次第のため、初回 CI で mcp-toolkit のコメント差分を確認し、churn するなら許容 / 別途対処（値は正）を判断 |
 | 独自スクリプトの regex が上流記法変更で外れる | §5.2 の fail-fast（anchor が 1 回マッチしなければ非ゼロ終了）で「差分ゼロ成功」の見逃しを防ぐ。dry-run / 冪等性テストでも検知 |

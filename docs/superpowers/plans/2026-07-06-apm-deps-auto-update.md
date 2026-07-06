@@ -15,7 +15,7 @@
 - apm CLI 版は **0.24.0** を明示 pin（apm-action の `apm-version`）。統一版の SSoT は `base/.apm/instructions/apm-workflow.instructions.md`。
 - pin 形式: git 依存（superpowers / chrome-devtools / serena）は **commit SHA ピン維持**、context7 は **npm exact version ピン維持**。
 - 「最新」の定義: git 依存は**最新 release tag → commit SHA**（main HEAD 追従はしない）。context7 は `npm view` の最新版。
-- サードパーティ Action は **commit SHA で固定**（`@v1`/`@v6` の major tag のまま使わない）。対応バージョンをコメント併記。
+- サードパーティ Action は **commit SHA で固定**（`@v1`/`@v8` の major tag のまま使わない）。対応バージョンをコメント併記。
 - 更新順序を固定: **独自スクリプト（context7 / serena）→ apm-action（lockfile 生成）**。逆順は lockfile ドリフトを招く。
 - コミット対象を **`base/apm.yml` / `mcp-toolkit/apm.yml` / 各 `apm.lock.yaml` に限定**。apm update の展開物はコミットしない。
 - fail-fast: managed 依存の anchor が対象ファイルに 1 回マッチしなければ非ゼロ終了。release / npm 版取得不可のみ skip + warn。
@@ -41,7 +41,7 @@
 
 **Interfaces:**
 - Produces:
-  - `apm-pins.sh update [--dry-run]` — `mcp-toolkit/apm.yml`（`APM_MCP_FILE` で上書き可）の context7 版と serena SHA を最新へ書換。`--dry-run` は差分表示のみ。解決値は `APM_PINS_CONTEXT7_VERSION` / `APM_PINS_SERENA_SHA` があればそれを使い、無ければ `npm view` / `gh api` で解決。anchor が 1 回マッチしなければ exit 3。解決値が空なら warn + skip（exit 0 維持）。
+  - `apm-pins.sh update [--dry-run]` — `mcp-toolkit/apm.yml`（`APM_MCP_FILE` で上書き可）の context7 版と serena SHA を最新へ書換。`--dry-run` は差分表示のみ。解決値は `APM_PINS_CONTEXT7_VERSION` / `APM_PINS_SERENA_SHA` があればそれを使い、無ければ `npm view` / `gh api` で解決。anchor が 1 回マッチしなければ exit 3。**解決値が空（npm/gh 解決失敗）でも exit 3**（context7/serena は常に存在するため空＝実障害。silent skip しない）。
 
 - [ ] **Step 1: 失敗するテストを書く（update の置換・fail-fast・冪等・dry-run）**
 
@@ -131,7 +131,6 @@ CHROME_RE='chrome-devtools-mcp#[0-9a-f]{40}'
 SUPER_RE='obra/superpowers#[0-9a-f]{40}'
 
 die(){ echo "ERROR: $*" >&2; exit 3; }
-warn(){ echo "WARN: $*" >&2; }
 count(){ grep -oE "$1" "$2" 2>/dev/null | wc -l | tr -d ' '; }
 
 resolve_context7(){
@@ -147,21 +146,19 @@ resolve_serena(){
 
 cmd_update(){
   local dry=0; [ "${1:-}" = "--dry-run" ] && dry=1
-  local work; work="$(mktemp)"; cp "$MCP_FILE" "$work"
 
-  # fail-fast: 各 anchor はちょうど 1 回マッチすること
+  # fail-fast(1): 各 anchor はちょうど 1 回マッチすること
   [ "$(count "$CONTEXT7_RE" "$MCP_FILE")" = "1" ] || die "context7 anchor not found exactly once in $MCP_FILE"
   [ "$(count "$SERENA_RE" "$MCP_FILE")" = "1" ] || die "serena anchor not found exactly once in $MCP_FILE"
 
+  # fail-fast(2): 最新版の解決失敗は silent skip せず非ゼロ終了
   local c7 sr
-  c7="$(resolve_context7)"; sr="$(resolve_serena)"
+  c7="$(resolve_context7)"; [ -n "$c7" ] || die "failed to resolve context7 version (npm view)"
+  sr="$(resolve_serena)"; [ -n "$sr" ] || die "failed to resolve serena sha (gh api)"
 
-  if [ -n "$c7" ]; then
-    perl -i -pe 's{(\@upstash/context7-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$c7"'}g' "$work"
-  else warn "context7 version unresolved; skipping"; fi
-  if [ -n "$sr" ]; then
-    perl -i -pe 's{(github\.com/oraios/serena\@)[0-9a-f]{40}}{${1}'"$sr"'}g' "$work"
-  else warn "serena sha unresolved; skipping"; fi
+  local work; work="$(mktemp)"; cp "$MCP_FILE" "$work"
+  perl -i -pe 's{(\@upstash/context7-mcp\@)[0-9]+\.[0-9]+\.[0-9]+}{${1}'"$c7"'}g' "$work"
+  perl -i -pe 's{(github\.com/oraios/serena\@)[0-9a-f]{40}}{${1}'"$sr"'}g' "$work"
 
   if [ "$dry" = "1" ]; then
     diff -u "$MCP_FILE" "$work" || true
@@ -374,9 +371,10 @@ Run（実装時点の最新リリースの SHA を取得。バージョンはコ
 ```bash
 gh api repos/actions/checkout/commits/v4 --jq '.sha'
 gh api repos/microsoft/apm-action/commits/v1.10.0 --jq '.sha'
-gh release view --repo peter-evans/create-pull-request --json tagName --jq '.tagName'   # 最新 v6/v7 を確認
+gh release view --repo peter-evans/create-pull-request --json tagName --jq '.tagName'   # 最新 v8 を確認
 gh api repos/peter-evans/create-pull-request/commits/<上のtag> --jq '.sha'
 ```
+
 Expected: 各 Action の 40hex SHA を得る（次の Step で `<sha>` に埋める）
 
 - [ ] **Step 2: ワークフローを作成**
@@ -437,7 +435,7 @@ jobs:
         run: ./scripts/apm-pins.sh render-body "$RUNNER_TEMP/apm-before" > "$RUNNER_TEMP/apm-pr-body.md"
 
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@<sha>   # create-pull-request v6.x/v7.x
+        uses: peter-evans/create-pull-request@<sha>   # create-pull-request v8.x
         with:
           branch: chore/apm-deps-update
           delete-branch: true
@@ -460,6 +458,7 @@ Run（actionlint があれば優先。無ければ YAML パースで代用）:
 actionlint .github/workflows/apm-update.yml || \
 python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/apm-update.yml')); print('YAML OK')"
 ```
+
 Expected: エラーなし（`YAML OK` または actionlint 無出力）
 
 - [ ] **Step 4: コミット**
@@ -478,6 +477,7 @@ gh label create dependencies --color 0366d6 --description "依存更新" --repo 
 gh api -X PUT repos/ROhta/apm-config/actions/permissions/workflow \
   -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true
 ```
+
 Expected: ラベル作成（または既存メッセージ）、権限 API が 204/200
 
 - [ ] **Step 6: 初回 dispatch 実行で lockfile 生成と PR 作成を検証**
@@ -490,6 +490,7 @@ sleep 10 && gh run list --workflow apm-update.yml --repo ROhta/apm-config -L 1
 # 完了後、生成 PR を確認
 gh pr list --repo ROhta/apm-config --head chore/apm-deps-update --json number,files
 ```
+
 Expected: 実行成功。PR `chore/apm-deps-update` が作られ、変更ファイルが `base/apm.yml` / `base/apm.lock.yaml` / `mcp-toolkit/apm.yml` / `mcp-toolkit/apm.lock.yaml` **のみ**（apm update の展開物＝`.claude/`・`.github/instructions/` 等が含まれないこと）。context7 は 3.2.2 へ更新されている。
 
 - [ ] **Step 7: 2 回目実行でローリング更新（PR 乱立なし）を検証**
@@ -547,6 +548,7 @@ Expected: PASS（`9 passed, 0 failed`）
 git fetch origin
 git merge origin/main --no-edit
 ```
+
 Expected: 衝突なし（衝突時は解消してコミット）
 
 - [ ] **Step 3: 実装 PR を作成**
@@ -556,8 +558,9 @@ Run:
 ```bash
 gh pr create --base main --assignee @me \
   --title "feat(ci): apm 依存 pin の自動更新ワークフローを追加 (#7)" \
-  --body "Closes #7。設計 spec (PR #13) に基づく実装。apm-pins.sh(context7/serena) + apm-action(superpowers/chrome-devtools) + peter-evans で週次/手動の pin 追従 PR を作る。lockfile を新規導入。"
+  --body "Closes #7。設計 spec (\`docs/superpowers/specs/2026-07-05-apm-deps-auto-update-design.md\`) に基づく実装。apm-pins.sh(context7/serena) + apm-action(superpowers/chrome-devtools) + peter-evans で週次/手動の pin 追従 PR を作る。lockfile を新規導入。"
 ```
+
 Expected: PR が作成される（spec PR #13 マージ後に出すなら本 Task を後回しにする）
 
 ---
