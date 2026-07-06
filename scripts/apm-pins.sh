@@ -40,6 +40,8 @@ resolve_superpowers(){
 # ("<tag>\t<sha>" 形式) のは、コメント中のバージョン表記(chrome-devtools-mcp@X.Y.Z) を
 # best-effort で同期するため（呼び出し元はコマンド置換のサブシェルを経由するので、
 # ここでグローバル変数に代入しても呼び出し元には伝播しない）。
+# ただし APM_PINS_CHROME_SHA で override するパスでは tag は空文字のまま返る
+# （"\t<sha>" 形式）ため、その場合コメント同期は呼び出し元で skip される。
 resolve_chrome(){
   if [ -n "${APM_PINS_CHROME_SHA:-}" ]; then printf '\t%s\n' "$APM_PINS_CHROME_SHA"; return; fi
   local tag; tag="$(gh api repos/ChromeDevTools/chrome-devtools-mcp/releases/latest --jq .tag_name 2>/dev/null || true)"

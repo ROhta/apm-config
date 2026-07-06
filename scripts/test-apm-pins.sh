@@ -64,7 +64,11 @@ beforeBase="$(cat "$bf")"; beforeMcp="$(cat "$f")"
 if APM_BASE_FILE="$bf" APM_MCP_FILE="$f" \
    APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
    APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null; then
-  [ "$beforeBase" = "$(cat "$bf")" ] && [ "$beforeMcp" = "$(cat "$f")" ] && ok "idempotent" || ng "idempotent"
+  if [ "$beforeBase" = "$(cat "$bf")" ] && [ "$beforeMcp" = "$(cat "$f")" ]; then
+    ok "idempotent"
+  else
+    ng "idempotent"
+  fi
 else
   ng "update command failed unexpectedly (test 2 setup)"
 fi
@@ -75,7 +79,11 @@ f2="$TMP/mcp2.yml"; make_mcp "$f2"; b2="$(cat "$f2")"
 if APM_BASE_FILE="$bf2" APM_MCP_FILE="$f2" \
    APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
    APM_PINS_CONTEXT7_VERSION=8.8.8 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update --dry-run >/dev/null; then
-  [ "$bb2" = "$(cat "$bf2")" ] && [ "$b2" = "$(cat "$f2")" ] && ok "dry-run no write (base+mcp)" || ng "dry-run no write (base+mcp)"
+  if [ "$bb2" = "$(cat "$bf2")" ] && [ "$b2" = "$(cat "$f2")" ]; then
+    ok "dry-run no write (base+mcp)"
+  else
+    ng "dry-run no write (base+mcp)"
+  fi
 else
   ng "update --dry-run command failed unexpectedly (test 3 setup)"
 fi
@@ -113,7 +121,11 @@ fb="$TMP/b_before.yml"; fa="$TMP/b_after.yml"
 printf 'name: p\nversion: 1.2.0\nx: old\n' > "$fb"
 printf 'name: p\nversion: 1.2.0\nx: new\n' > "$fa"
 if "$SCRIPT" bump-version "$fa" "$fb" >/dev/null; then
-  grep -q '^version: 1.2.1$' "$fa" && ok "bump on change" || ng "bump on change"
+  if grep -q '^version: 1.2.1$' "$fa"; then
+    ok "bump on change"
+  else
+    ng "bump on change"
+  fi
 else
   ng "bump-version command failed unexpectedly (test 7 setup)"
 fi
@@ -123,7 +135,11 @@ fb2="$TMP/c_before.yml"; fa2="$TMP/c_after.yml"
 printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fb2"
 printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fa2"
 if "$SCRIPT" bump-version "$fa2" "$fb2" >/dev/null; then
-  grep -q '^version: 3.0.5$' "$fa2" && ok "no bump when unchanged" || ng "no bump when unchanged"
+  if grep -q '^version: 3.0.5$' "$fa2"; then
+    ok "no bump when unchanged"
+  else
+    ng "no bump when unchanged"
+  fi
 else
   ng "bump-version command failed unexpectedly (test 8 setup)"
 fi
@@ -138,8 +154,16 @@ curmcp="$TMP/cur_mcp.yml"; curbase="$TMP/cur_base.yml"
 make_mcp "$curmcp"; perl -i -pe 's/context7-mcp\@3\.2\.0/context7-mcp\@3.2.2/' "$curmcp"
 cp "$BD/base.apm.yml" "$curbase"
 if out="$(APM_BASE_FILE="$curbase" APM_MCP_FILE="$curmcp" "$SCRIPT" render-body "$BD")"; then
-  echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2' && ok "render-body shows changed context7" || ng "render-body shows changed context7"
-  echo "$out" | grep -q 'superpowers' && ng "render-body must omit unchanged superpowers" || ok "render-body omits unchanged"
+  if echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2'; then
+    ok "render-body shows changed context7"
+  else
+    ng "render-body shows changed context7"
+  fi
+  if echo "$out" | grep -q 'superpowers'; then
+    ng "render-body must omit unchanged superpowers"
+  else
+    ok "render-body omits unchanged"
+  fi
 else
   ng "render-body command failed unexpectedly (test 9 setup)"
 fi
@@ -235,6 +259,44 @@ if "$SCRIPT" bump-version "$fa13" "$fb13" >/dev/null 2>&1; then
   ng "fail-fast on malformed version line (not strict X.Y.Z)"
 else
   ok "fail-fast on malformed version line (not strict X.Y.Z)"
+fi
+
+# 16. gh 解決の成功系: releases/latest → commits/<tag> の tag→SHA flow を実際に叩く
+#     (superpowers/serena/chrome-devtools は全て gh スタブ経由、tag 種別非依存で解決される
+#     ことを検証する。context7 のみ npm view 経由なので env 注入で isolate する)
+GHSTUB="$TMP/ghstub"; mkdir -p "$GHSTUB"
+cat > "$GHSTUB/gh" <<'SH'
+#!/usr/bin/env bash
+# args: api <path> --jq <query>
+path="$2"
+case "$path" in
+  repos/obra/superpowers/releases/latest) echo "v9.9.9" ;;
+  repos/oraios/serena/releases/latest) echo "v9.9.9" ;;
+  repos/ChromeDevTools/chrome-devtools-mcp/releases/latest) echo "chrome-devtools-mcp-v9.9.9" ;;
+  repos/obra/superpowers/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
+  repos/oraios/serena/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
+  repos/ChromeDevTools/chrome-devtools-mcp/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
+  *) exit 1 ;;
+esac
+SH
+chmod +x "$GHSTUB/gh"
+GHSHA=abcdef0123456789abcdef0123456789abcdef01
+bf14="$TMP/base14.yml"; make_base "$bf14"
+f14="$TMP/mcp14.yml"; make_mcp "$f14"
+# chrome-devtools のバージョンを書き添えた人間向けコメント（best-effort 同期の対象）を追加
+printf '\n  # see also chrome-devtools-mcp@0.7.2 release notes\n' >> "$f14"
+if ( PATH="$GHSTUB:$PATH"; unset APM_PINS_SUPERPOWERS_SHA APM_PINS_CHROME_SHA APM_PINS_SERENA_SHA
+     APM_BASE_FILE="$bf14" APM_MCP_FILE="$f14" APM_PINS_CONTEXT7_VERSION=9.9.9 "$SCRIPT" update >/dev/null ); then
+  if grep -q "obra/superpowers#$GHSHA" "$bf14" \
+    && grep -q "chrome-devtools-mcp#$GHSHA" "$f14" \
+    && grep -q "oraios/serena@$GHSHA" "$f14" \
+    && grep -q 'chrome-devtools-mcp@9.9.9' "$f14"; then
+    ok "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
+  else
+    ng "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
+  fi
+else
+  ng "gh-stubbed update command failed unexpectedly (test 16 setup)"
 fi
 
 echo "== $pass passed, $fail failed =="
