@@ -46,6 +46,7 @@ jobs:
         with:
           branch: chore/apm-deps-update
           delete-branch: true
+          sign-commits: true          # GitHub API 経由でコミットを作成し verified 署名（秘密鍵不要）
           title: "chore(deps): apm 依存 pin を更新"
           body-path: ${{ runner.temp }}/apm-pr-body.md
           labels: dependencies
