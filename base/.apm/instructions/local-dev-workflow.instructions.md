@@ -1,5 +1,5 @@
 ---
-description: ローカル開発時のフロー (実装完了から PR 作成、PR レビュー応答ループ) を superpowers 系スキルで定義
+description: ローカル開発時のフロー (実装完了から PR 作成) を superpowers 系スキルで定義。PR レビュー応答ループは review-response-loop ルールに委譲
 applyTo: "**"
 ---
 
@@ -22,8 +22,7 @@ applyTo: "**"
 (`verification-before-completion` / `requesting-code-review` / `receiving-code-review`
 / `finishing-a-development-branch`) が利用可能であることを前提とする。
 
-- **Claude Code**: 上記 4 つのスキルが `Skill` ツールから呼び出せることを起動時に確認する
-- **Codex CLI / GitHub Copilot 等**: 同等のスキル集が読み込まれているかを確認する
+- 起動時に、上記 4 スキル（実行環境によっては同等のスキル集）が呼び出せることを確認する（例: Claude Code なら `Skill` ツールから）。
 
 利用できない場合は、ユーザーに次のように案内し、本ワークフローの実行をその場で中断する。
 
@@ -57,102 +56,10 @@ PR 作成時は以下を守る。
 
 ## 3. PR レビュー応答ループ (PR 作成 / push 毎)
 
-PR を新規作成、または既存ブランチに push した後、**ユーザーからの合図を待たずに** 自走でレビュースレッドの有無を確認し、指摘があれば対応する。**すべてのスレッドが resolve されるまでループを継続する。**
-
-### 3.0 起動
-
-`gh pr create` または `git push` の成功直後に本フローを開始する (ユーザー入力を待たない)。
-
-- **即時 1 回**: push 完了から約 2 分 (120 秒) 待機 (Copilot Review の初回反応待ち) し、§3.1 を 1 回実行する。
-- **追跡**: 指摘は遅延することがあるため、さらに約 2 分後にもう 1 回フォローする。Claude Code では `ScheduleWakeup` で予約する（下記）。それ以外の環境（copilot / codex 等）では手動で約 2 分後に検知を再実行する。即時 + 追跡で **連続 2 回** 新規指摘がなければ追跡を終了する。
-
-  ```text
-  ScheduleWakeup({ delaySeconds: 120,
-    prompt: "PR #<番号> の Copilot Review 応答ループを再開する。local-dev-workflow §3 に従い、未 resolve スレッドを検知して処理せよ。",
-    reason: "Copilot Review 遅延応答の追跡チェック (push から 2 分後)" })
-  ```
-
-- **ユーザー復帰時フォールバック**: 次にユーザー入力を受け取ったとき、その入力が PR と無関係に見えても、まず自分の未マージ PR の未 resolve スレッドを 1 回確認する。あれば「PR #<番号> に未対応のレビュースレッドがあります。先に応答しますか？」と確認し、了承されたら §3.1〜3.3 を先に実行する。
-
-### 3.1 検知
-
-`gh api graphql` で未 resolve なレビュースレッドを列挙する (`gh pr view --json reviews,comments` は thread の `isResolved` を返さないので使わない)。owner / repo は次で動的に解決し、GraphQL には別変数で渡す: `OWNER=$(gh repo view --json owner --jq .owner.login)`、`REPO=$(gh repo view --json name --jq .name)`。
-
-レビュースレッド数が 100 を超える場合は、`reviewThreads` の `pageInfo { hasNextPage endCursor }` を見て `hasNextPage: true` の間 `after: $threadsCursor` を渡し、カーソル送りで全スレッドを取得する (下記は初回ページの取得例)。各スレッドの comments が 50 件を超える稀なケースは、そのスレッドを単位に別途ページングする — コメントのカーソルはスレッドごとに異なるため、全スレッド一括の単一 `commentsCursor` では正しく辿れない (下記の例では comments 側の cursor 変数は使わず、50 件超の検知だけ `comments.pageInfo.hasNextPage` で行う)。
-
-```bash
-gh api graphql -f query='
-query($owner: String!, $repo: String!, $pr: Int!, $threadsCursor: String) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $pr) {
-      reviewThreads(first: 100, after: $threadsCursor) {
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          id            # GraphQL Node ID — resolveReviewThread mutation の threadId に渡す
-          isResolved
-          comments(first: 50) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              id          # GraphQL Node ID
-              databaseId  # 数値 ID — REST API /pulls/comments/{comment_id}/replies の comment_id に渡す
-              author { login }
-              body
-              path
-              line
-            }
-          }
-        }
-      }
-    }
-  }
-}' -F owner=<owner> -F repo=<repo> -F pr=<number>
-```
-
-対象は `isResolved: false` かつ先頭コメント (`comments.nodes[0]`) の author が bot (例: `copilot-pull-request-reviewer`) のスレッドのみとする。
-
-### 3.2 妥当性判断
-
-各指摘について次のいずれかに分類する。
-
-- **妥当**: 反映すべき具体的かつ正当な指摘
-- **不当**: 文脈を踏まえると採用すべきでない、誤読、二重指摘 等
-
-### 3.3 対応
-
-#### 妥当な指摘
-
-1. 指摘に従ってコードを修正する
-2. 修正をコミットする
-3. 該当インラインコメントに返信する。本文に対応コミットの SHA を **前後に半角空白を入れて** 記載し、GitHub UI でコミットへのリンクとして描画させる。
-
-   ```bash
-   gh api repos/<owner>/<repo>/pulls/<pr>/comments/<comment_database_id>/replies \
-     -f body='対応しました abc1234 '
-   ```
-
-   - `<comment_database_id>` は §3.1 の `databaseId` フィールド (**数値 ID**) を指す。GraphQL Node ID (`PRRC_...`) は REST API では受け付けられない点に注意。
-   - 本文は日本語で記述 (pr-review ルール参照)
-   - SHA の前後を必ず半角空白で挟む
-4. スレッドを resolve する。
-
-   ```bash
-   gh api graphql -f query='
-   mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }
-   ' -F id=<thread_node_id>
-   ```
-
-#### 不当と判断した場合
-
-1. コードは変更しない
-2. インラインコメントで「不当と判断した理由」を日本語で具体的に記載する
-3. スレッドを resolve する (上記 mutation 参照)
-
-### 3.4 繰り返し
-
-- 全スレッドを resolve するまで 3.1〜3.3 をループする
-- 次の `git push` が発生したら、再度 3.1 から実行する
+PR 作成・push 後の自走レビュー応答ループ（検知 → 妥当性判断 → 対応 → resolve まで繰り返し）は **review-response-loop ルール**に従う。このループは superpowers の有無に依存しない共通手順として base から配信される（`.github/instructions/review-response-loop.instructions.md` / `.claude/rules/review-response-loop.md`）。
 
 ## 関連ルール
 
+- PR 作成・push 後の自走レビュー応答ループは review-response-loop ルールを参照
 - レビュー応答の文章ルールは共通パッケージ `ROhta/apm-config/base` の pr-review ルールから配信。生成物は `.github/instructions/pr-review.instructions.md` / `.claude/rules/pr-review.md`
 - 開発フロー (ブランチ〜マージ〜リリース) の高レベル順序は dev-workflow ルールを参照
