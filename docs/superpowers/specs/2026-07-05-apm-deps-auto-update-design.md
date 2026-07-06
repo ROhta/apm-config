@@ -3,7 +3,16 @@
 - 日付: 2026-07-05
 - 改訂: 2026-07-06（apm CLI 0.24.0 標準化を受け、`microsoft/apm-action` を用いた
   ハイブリッド方式へ再設計。旧版＝独自スクリプト単独方式は §3.1 に不採用理由を記載）
-- ステータス: レビュー待ち
+- **改訂 2: 2026-07-06（重要）**: 実装後の初回 `workflow_dispatch` で apm-action `update:true` が
+  **chrome-devtools の lightweight tag で失敗**（`apm update` は SHA pin を *annotated* release tag に
+  しか追従せず、無ければ exit 1）と判明。→ **apm-action を全廃し、全 4 依存（superpowers /
+  chrome-devtools / context7 / serena）を独自スクリプト `apm-pins.sh` の tag→SHA 解決
+  （`gh api .../commits/<tag>`, tag 種別非依存）＋ npm view で更新する pure custom-script 方式に確定**。
+  lockfile も廃止（コミット対象は `base/apm.yml` + `mcp-toolkit/apm.yml` のみ）。
+  **以降 §3.1 / §5.1 / §6 / §7 / §8 の apm-action・lockfile・trust 記述は本改訂で superseded**
+  （§5.2 の独自スクリプト方式を全依存へ拡張したものが最終形）。背景の検証事実は
+  memory `apm-update-annotated-tag-behavior` に記録。
+- ステータス: 実装済み（pure custom-script 方式・#7 の後続 fix PR）
 - 対象 Issue: #7「apm actionの追加」（CI で apm を自動更新し PR を作成する）
 - 対象リポジトリ: apm-config（producer / カタログ側）
 
@@ -54,10 +63,10 @@ git 依存の追従を `microsoft/apm-action` に委ねられる点が再設計�
 
 | 論点 | 決定 |
 | --- | --- |
-| 実装方式 | **apm-action ハイブリッド**: `dependencies.apm` 2 件を apm-action `update:true`、`dependencies.mcp` 2 件を独自スクリプト、PR は `peter-evans/create-pull-request` |
-| apm CLI 版 | apm-action の `apm-version` を **0.24.0** に明示 pin（base の apm-workflow instructions の統一版を SSoT として追従。既定 0.14.0 のまま使わない） |
-| pin 形式 | git 依存は commit SHA ピンを維持（0.24.0 の apm update が最新 release tag → SHA に自動書換）。context7 は npm の exact version ピンを維持（独自スクリプト） |
-| **lockfile** | `apm update` は `apm.lock.yaml` を生成・更新するため、**base/ と mcp-toolkit/ に `apm.lock.yaml` を新規導入しコミットする**（現状「lockfile ゼロ」からの構成変更。**ユーザー承認済み 2026-07-06**） |
+| 実装方式（改訂2で確定） | **pure custom-script**: 全 4 依存を `apm-pins.sh update` で更新（git 依存 3 = superpowers / chrome-devtools / serena は `gh api .../commits/<tag>` で最新 release tag→SHA 解決、context7 は `npm view`）、PR は `peter-evans/create-pull-request`。apm-action は使わない（旧: apm-action ハイブリッド） |
+| apm CLI 版（改訂2） | **workflow で apm CLI / apm-action を使わない**ため該当なし（旧: apm-action の `apm-version` を 0.24.0 pin） |
+| pin 形式 | git 依存は commit SHA ピンを維持、context7 は npm の exact version ピンを維持。全て独自スクリプトが tag→SHA / npm view で解決し外科的に書換（tag 種別非依存） |
+| lockfile（改訂2） | **廃止**。lockfile は生成せず、コミット対象は `base/apm.yml` + `mcp-toolkit/apm.yml` のみ（旧: apm update が生成する `apm.lock.yaml` を導入する予定だった） |
 | 展開物 | `apm update` の post-install（compile/deploy）が生成する依存 primitive の展開ツリーはコミットしない。**コミット対象を `apm.yml` + `apm.lock.yaml` に限定** |
 | 「最新」の定義 | git 依存は最新 release tag を commit SHA に解決（main HEAD 追従はしない）。context7 は `npm view` の最新版 |
 | トリガー頻度 | 週次（cron）+ 手動実行 |
