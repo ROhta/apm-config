@@ -31,18 +31,27 @@ NEWSHA=1111111111111111111111111111111111111111
 
 # 1. 置換が効く
 f="$TMP/mcp1.yml"; make_mcp "$f"
-APM_MCP_FILE="$f" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null
-grep -q '@upstash/context7-mcp@9.9.9' "$f" && grep -q "oraios/serena@$NEWSHA" "$f" && ok "replaces context7+serena" || ng "replaces context7+serena"
+if APM_MCP_FILE="$f" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null; then
+  grep -q '@upstash/context7-mcp@9.9.9' "$f" && grep -q "oraios/serena@$NEWSHA" "$f" && ok "replaces context7+serena" || ng "replaces context7+serena"
+else
+  ng "update command failed unexpectedly (test 1 setup)"
+fi
 
 # 2. 冪等（2回目は差分ゼロ）
 before="$(cat "$f")"
-APM_MCP_FILE="$f" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null
-[ "$before" = "$(cat "$f")" ] && ok "idempotent" || ng "idempotent"
+if APM_MCP_FILE="$f" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null; then
+  [ "$before" = "$(cat "$f")" ] && ok "idempotent" || ng "idempotent"
+else
+  ng "update command failed unexpectedly (test 2 setup)"
+fi
 
 # 3. dry-run はファイルを変えない
 f2="$TMP/mcp2.yml"; make_mcp "$f2"; b2="$(cat "$f2")"
-APM_MCP_FILE="$f2" APM_PINS_CONTEXT7_VERSION=8.8.8 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update --dry-run >/dev/null
-[ "$b2" = "$(cat "$f2")" ] && ok "dry-run no write" || ng "dry-run no write"
+if APM_MCP_FILE="$f2" APM_PINS_CONTEXT7_VERSION=8.8.8 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update --dry-run >/dev/null; then
+  [ "$b2" = "$(cat "$f2")" ] && ok "dry-run no write" || ng "dry-run no write"
+else
+  ng "update --dry-run command failed unexpectedly (test 3 setup)"
+fi
 
 # 4. fail-fast: context7 anchor を壊すと非ゼロ
 f3="$TMP/mcp3.yml"; make_mcp "$f3"
@@ -55,15 +64,21 @@ else ok "fail-fast on missing anchor"; fi
 fb="$TMP/b_before.yml"; fa="$TMP/b_after.yml"
 printf 'name: p\nversion: 1.2.0\nx: old\n' > "$fb"
 printf 'name: p\nversion: 1.2.0\nx: new\n' > "$fa"
-"$SCRIPT" bump-version "$fa" "$fb" >/dev/null
-grep -q '^version: 1.2.1$' "$fa" && ok "bump on change" || ng "bump on change"
+if "$SCRIPT" bump-version "$fa" "$fb" >/dev/null; then
+  grep -q '^version: 1.2.1$' "$fa" && ok "bump on change" || ng "bump on change"
+else
+  ng "bump-version command failed unexpectedly (test 5 setup)"
+fi
 
 # 6. bump-version: 変更なし（version 行以外同一）→ 据え置き
 fb2="$TMP/c_before.yml"; fa2="$TMP/c_after.yml"
 printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fb2"
 printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fa2"
-"$SCRIPT" bump-version "$fa2" "$fb2" >/dev/null
-grep -q '^version: 3.0.5$' "$fa2" && ok "no bump when unchanged" || ng "no bump when unchanged"
+if "$SCRIPT" bump-version "$fa2" "$fb2" >/dev/null; then
+  grep -q '^version: 3.0.5$' "$fa2" && ok "no bump when unchanged" || ng "no bump when unchanged"
+else
+  ng "bump-version command failed unexpectedly (test 6 setup)"
+fi
 
 # 7. render-body: 変化した pin だけ表に出る
 BD="$TMP/before"; mkdir -p "$BD"
@@ -74,9 +89,12 @@ printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%
 curmcp="$TMP/cur_mcp.yml"; curbase="$TMP/cur_base.yml"
 make_mcp "$curmcp"; perl -i -pe 's/context7-mcp\@3\.2\.0/context7-mcp\@3.2.2/' "$curmcp"
 cp "$BD/base.apm.yml" "$curbase"
-out="$(APM_BASE_FILE="$curbase" APM_MCP_FILE="$curmcp" "$SCRIPT" render-body "$BD")"
-echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2' && ok "render-body shows changed context7" || ng "render-body shows changed context7"
-echo "$out" | grep -q 'superpowers' && ng "render-body must omit unchanged superpowers" || ok "render-body omits unchanged"
+if out="$(APM_BASE_FILE="$curbase" APM_MCP_FILE="$curmcp" "$SCRIPT" render-body "$BD")"; then
+  echo "$out" | grep -q 'context7' && echo "$out" | grep -q '3.2.0' && echo "$out" | grep -q '3.2.2' && ok "render-body shows changed context7" || ng "render-body shows changed context7"
+  echo "$out" | grep -q 'superpowers' && ng "render-body must omit unchanged superpowers" || ok "render-body omits unchanged"
+else
+  ng "render-body command failed unexpectedly (test 7 setup)"
+fi
 
 # 8. render-body: context7 のバージョンが 7 文字超でも切り詰められない（_short() の版数バグ回帰）
 BD8="$TMP/before8"; mkdir -p "$BD8"
@@ -86,11 +104,14 @@ printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%
 curmcp8="$TMP/cur_mcp8.yml"; curbase8="$TMP/cur_base8.yml"
 make_mcp "$curmcp8"; perl -i -pe 's/context7-mcp\@3\.2\.0/context7-mcp\@13.20.30/' "$curmcp8"
 cp "$BD8/base.apm.yml" "$curbase8"
-out8="$(APM_BASE_FILE="$curbase8" APM_MCP_FILE="$curmcp8" "$SCRIPT" render-body "$BD8")"
-if echo "$out8" | grep -qE '`13\.20\.30`' && ! echo "$out8" | grep -qE '`13\.20\.3`'; then
-  ok "render-body keeps long version intact (no truncation)"
+if out8="$(APM_BASE_FILE="$curbase8" APM_MCP_FILE="$curmcp8" "$SCRIPT" render-body "$BD8")"; then
+  if echo "$out8" | grep -qE '`13\.20\.30`' && ! echo "$out8" | grep -qE '`13\.20\.3`'; then
+    ok "render-body keeps long version intact (no truncation)"
+  else
+    ng "render-body keeps long version intact (no truncation)"
+  fi
 else
-  ng "render-body keeps long version intact (no truncation)"
+  ng "render-body command failed unexpectedly (test 8 setup)"
 fi
 
 # 9. fail-fast: npm/gh が空応答でも silent skip せず非ゼロ終了（ネットワーク不要）
@@ -121,13 +142,16 @@ SHA_NEW=4444444444444444444444444444444444444444
 curmcp10="$TMP/cur_mcp10.yml"; curbase10="$TMP/cur_base10.yml"
 make_mcp "$curmcp10"; perl -i -pe "s/$SHA_OLD/$SHA_NEW/" "$curmcp10"
 cp "$BD10/base.apm.yml" "$curbase10"
-out10="$(APM_BASE_FILE="$curbase10" APM_MCP_FILE="$curmcp10" "$SCRIPT" render-body "$BD10")"
-if echo "$out10" | grep -qE '\| chrome-devtools \| `9133082` \| `4444444` \|' \
-  && ! echo "$out10" | grep -q "$SHA_OLD" \
-  && ! echo "$out10" | grep -q "$SHA_NEW"; then
-  ok "render-body shows changed SHA pin, 7-char shortened"
+if out10="$(APM_BASE_FILE="$curbase10" APM_MCP_FILE="$curmcp10" "$SCRIPT" render-body "$BD10")"; then
+  if echo "$out10" | grep -qE '\| chrome-devtools \| `9133082` \| `4444444` \|' \
+    && ! echo "$out10" | grep -q "$SHA_OLD" \
+    && ! echo "$out10" | grep -q "$SHA_NEW"; then
+    ok "render-body shows changed SHA pin, 7-char shortened"
+  else
+    ng "render-body shows changed SHA pin, 7-char shortened"
+  fi
 else
-  ng "render-body shows changed SHA pin, 7-char shortened"
+  ng "render-body command failed unexpectedly (test 10 setup)"
 fi
 
 # 11. fail-fast: context7 anchor が 2 回マッチすると非ゼロ終了
@@ -148,6 +172,16 @@ if APM_MCP_FILE="$f12" APM_PINS_CONTEXT7_VERSION=3.2.2-beta.1 APM_PINS_SERENA_SH
   ng "fail-fast on non-strict-semver context7 version"
 else
   ok "fail-fast on non-strict-semver context7 version"
+fi
+
+# 13. bump-version: version 行が厳密 X.Y.Z でない（例: 1.2）場合は die し、壊れた値を書き込まない
+fb13="$TMP/d_before.yml"; fa13="$TMP/d_after.yml"
+printf 'name: p\nversion: 1.2\nx: old\n' > "$fb13"
+printf 'name: p\nversion: 1.2\nx: new\n' > "$fa13"
+if "$SCRIPT" bump-version "$fa13" "$fb13" >/dev/null 2>&1; then
+  ng "fail-fast on malformed version line (not strict X.Y.Z)"
+else
+  ok "fail-fast on malformed version line (not strict X.Y.Z)"
 fi
 
 echo "== $pass passed, $fail failed =="

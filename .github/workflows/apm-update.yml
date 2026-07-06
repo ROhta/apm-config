@@ -3,17 +3,20 @@ on:
   schedule:
     - cron: "0 0 * * 1"     # 毎週月曜 00:00 UTC
   workflow_dispatch: {}
-permissions:
-  contents: write
-  pull-requests: write
 concurrency:
   group: apm-update
   cancel-in-progress: false
 jobs:
   update:
     runs-on: ubuntu-latest
+    # least-privilege: このジョブでのみ必要な権限を付与する
+    permissions:
+      contents: write       # 更新した pin / lockfile をコミットするため
+      pull-requests: write  # peter-evans/create-pull-request が PR を作成するため
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0            # actions/checkout v7.0.0
+        with:
+          persist-credentials: false   # GITHUB_TOKEN を git config に永続化させない（トークン漏えい面の縮小）
 
       - name: Snapshot current manifests
         run: |

@@ -14,7 +14,8 @@ CHROME_RE='chrome-devtools-mcp#[0-9a-f]{40}'
 SUPER_RE='obra/superpowers#[0-9a-f]{40}'
 
 die(){ echo "ERROR: $*" >&2; exit 3; }
-count(){ grep -oE "$1" "$2" 2>/dev/null | wc -l | tr -d ' '; }
+# grep は 0 マッチで exit 1 になるため、set -euo pipefail 下でも中断しないよう吸収する
+count(){ { grep -oE "$1" "$2" 2>/dev/null || true; } | wc -l | tr -d ' '; }
 
 resolve_context7(){
   if [ -n "${APM_PINS_CONTEXT7_VERSION:-}" ]; then echo "$APM_PINS_CONTEXT7_VERSION"; return; fi
@@ -60,7 +61,8 @@ cmd_bump_version(){
   if diff -q <(grep -v '^version:' "$before") <(grep -v '^version:' "$file") >/dev/null; then
     return 0   # version 行以外に差分なし → bump しない
   fi
-  local cur; cur="$(grep -E '^version:[[:space:]]*[0-9]' "$file" | head -1 | sed -E 's/^version:[[:space:]]*//')"
+  local cur; cur="$(grep -E '^version:[[:space:]]*[0-9]' "$file" | head -1 | sed -E 's/^version:[[:space:]]*//' || true)"
+  printf '%s' "$cur" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || die "version line in $file has unexpected format: '$cur'"
   local MA MI PA; IFS=. read -r MA MI PA <<<"$cur"
   local new="$MA.$MI.$((PA+1))"
   perl -i -pe 'BEGIN{$d=0} if(!$d && /^version:\s*\S+/){s/^version:\s*\S+/version: '"$new"'/; $d=1}' "$file"
@@ -70,10 +72,12 @@ cmd_bump_version(){
 _pins(){ # base-file mcp-file
   local bf="$1" mf="$2"
   local s c ct se
-  s="$(grep -oE "$SUPER_RE" "$bf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
-  c="$(grep -oE "$CHROME_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
-  ct="$(grep -oE "$CONTEXT7_RE" "$mf" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-  se="$(grep -oE "$SERENA_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1)"
+  # 各抽出パイプラインは grep の no-match(exit 1) や head の SIGPIPE で
+  # set -euo pipefail 下で中断し得るため、`|| true` で吸収し未検出は空文字に倒す
+  s="$(grep -oE "$SUPER_RE" "$bf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1 || true)"
+  c="$(grep -oE "$CHROME_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1 || true)"
+  ct="$(grep -oE "$CONTEXT7_RE" "$mf" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  se="$(grep -oE "$SERENA_RE" "$mf" 2>/dev/null | grep -oE '[0-9a-f]{40}' | head -1 || true)"
   printf 'superpowers\t%s\nchrome-devtools\t%s\ncontext7\t%s\nserena\t%s\n' "$s" "$c" "$ct" "$se"
 }
 _short(){ if printf '%s' "$1" | grep -qE '^[0-9a-f]{40}$'; then printf '%.7s' "$1"; else printf '%s' "$1"; fi; }
