@@ -51,7 +51,19 @@ cmd_update(){
   fi
 }
 
+cmd_bump_version(){
+  local file="$1" before="$2"
+  if diff -q <(grep -v '^version:' "$before") <(grep -v '^version:' "$file") >/dev/null; then
+    return 0   # version 行以外に差分なし → bump しない
+  fi
+  local cur; cur="$(grep -E '^version:[[:space:]]*[0-9]' "$file" | head -1 | sed -E 's/^version:[[:space:]]*//')"
+  local MA MI PA; IFS=. read -r MA MI PA <<<"$cur"
+  local new="$MA.$MI.$((PA+1))"
+  perl -i -pe 'BEGIN{$d=0} if(!$d && /^version:\s*\S+/){s/^version:\s*\S+/version: '"$new"'/; $d=1}' "$file"
+}
+
 case "${1:-}" in
   update) shift; cmd_update "$@";;
+  bump-version) shift; cmd_bump_version "$@";;
   *) die "usage: apm-pins.sh update [--dry-run]";;
 esac

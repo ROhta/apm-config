@@ -51,5 +51,19 @@ if APM_MCP_FILE="$f3" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSH
   ng "fail-fast on missing anchor"
 else ok "fail-fast on missing anchor"; fi
 
+# 5. bump-version: 変更あり → patch 上げ
+fb="$TMP/b_before.yml"; fa="$TMP/b_after.yml"
+printf 'name: p\nversion: 1.2.0\nx: old\n' > "$fb"
+printf 'name: p\nversion: 1.2.0\nx: new\n' > "$fa"
+"$SCRIPT" bump-version "$fa" "$fb" >/dev/null
+grep -q '^version: 1.2.1$' "$fa" && ok "bump on change" || ng "bump on change"
+
+# 6. bump-version: 変更なし（version 行以外同一）→ 据え置き
+fb2="$TMP/c_before.yml"; fa2="$TMP/c_after.yml"
+printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fb2"
+printf 'name: p\nversion: 3.0.5\nx: same\n' > "$fa2"
+"$SCRIPT" bump-version "$fa2" "$fb2" >/dev/null
+grep -q '^version: 3.0.5$' "$fa2" && ok "no bump when unchanged" || ng "no bump when unchanged"
+
 echo "== $pass passed, $fail failed =="
 [ "$fail" -eq 0 ]
