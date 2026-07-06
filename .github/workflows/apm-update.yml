@@ -1,0 +1,66 @@
+name: apm-update
+on:
+  schedule:
+    - cron: "0 0 * * 1"     # 毎週月曜 00:00 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: apm-update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5            # actions/checkout v4
+
+      - name: Snapshot current manifests
+        run: |
+          mkdir -p "$RUNNER_TEMP/apm-before"
+          cp base/apm.yml "$RUNNER_TEMP/apm-before/base.apm.yml"
+          cp mcp-toolkit/apm.yml "$RUNNER_TEMP/apm-before/mcp.apm.yml"
+
+      # 順序固定: 独自スクリプト(context7/serena) を先に(§5.0)
+      - name: Update command-embedded MCP versions (context7 / serena)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/apm-pins.sh update
+
+      # その後 apm-action(update:true) が git ref を追従し apm.lock.yaml を生成
+      - name: Refresh dependencies.apm pins + lockfile (base)
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439        # apm-action v1.10.0
+        with:
+          working-directory: base
+          apm-version: "0.24.0"
+          update: "true"
+
+      - name: Refresh dependencies.apm pins + lockfile (mcp-toolkit)
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439        # apm-action v1.10.0
+        with:
+          working-directory: mcp-toolkit
+          apm-version: "0.24.0"
+          update: "true"
+
+      - name: Patch-bump changed packages
+        run: |
+          ./scripts/apm-pins.sh bump-version base/apm.yml "$RUNNER_TEMP/apm-before/base.apm.yml"
+          ./scripts/apm-pins.sh bump-version mcp-toolkit/apm.yml "$RUNNER_TEMP/apm-before/mcp.apm.yml"
+
+      - name: Render PR body
+        run: ./scripts/apm-pins.sh render-body "$RUNNER_TEMP/apm-before" > "$RUNNER_TEMP/apm-pr-body.md"
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1   # create-pull-request v8.1.1
+        with:
+          branch: chore/apm-deps-update
+          delete-branch: true
+          title: "chore(deps): apm 依存 pin を更新"
+          body-path: ${{ runner.temp }}/apm-pr-body.md
+          labels: dependencies
+          commit-message: "chore(deps): apm 依存 pin を更新"
+          add-paths: |
+            base/apm.yml
+            base/apm.lock.yaml
+            mcp-toolkit/apm.yml
+            mcp-toolkit/apm.lock.yaml
