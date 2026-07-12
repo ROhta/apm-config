@@ -70,9 +70,8 @@ deepwiki は認証不要のホスト型リモート MCP のため追加ランタ
 
 MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-id>`) を優先** して登録する。
 ただし本 toolkit は「版を固定して再現性を担保する」ことを最優先とするため、レジストリ経由で
-次のいずれかに該当し挙動を担保できない場合に限り、**self-defined**
-(`apm mcp install <name> -- <command> [args...]` / `apm.yml` では `registry: false` + `command`/`args`)
-にフォールバックする。ここで `<registry-id>` はレジストリ項目 ID (例: `io.github.upstash/context7`)、
+次のいずれかに該当し挙動を担保できない場合に限り、**self-defined** にフォールバックする。
+ここで `<registry-id>` はレジストリ項目 ID (例: `io.github.upstash/context7`)、
 `<name>` は self-defined 時に付ける任意のローカル登録名 (例: `context7`) を指す。
 
 - **版を固定できない**: レジストリ項目に固定可能なバージョンが無い (`apm mcp show <registry-id>` の
@@ -82,6 +81,12 @@ MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-id>`
   (例: 期待する git コミット固定ではなく PyPI 版になる / streamable-http ではなく SSE になる 等)。
 - **不要な認証・前提を要求する**: レジストリ項目が self-defined では不要な API キー等を要求し、
   非対話 (CI / エージェント) 実行を妨げる。
+
+self-defined の登録形式はトランスポートで異なる。**stdio** は
+`apm mcp install <name> -- <command> [args...]` (`apm.yml` では `transport: stdio` + `command` / `args`)、
+**リモート (http / sse / streamable-http)** は `apm mcp install <name> --transport <t> --url <url>`
+(`apm.yml` では `transport: <t>` + `url`。例: deepwiki は `transport: http` +
+`url: https://mcp.deepwiki.com/mcp`)。いずれも `apm.yml` では `registry: false` を付ける。
 
 レジストリで登録する場合も `--mcp-version` で必ず版を固定する (固定不可なら上記により self-defined)。
 登録前に `apm mcp show <registry-id>` で「解決先パッケージ・トランスポート・版・要求 env」を確認すること。
