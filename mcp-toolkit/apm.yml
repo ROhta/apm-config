@@ -1,5 +1,5 @@
 name: apm-config-mcp-toolkit
-version: 1.3.0
+version: 1.3.1
 description: 共通開発ツール MCP（context7 / serena / chrome-devtools / deepwiki）の pin を一元管理
 author: ROhta
 license: GPL-3.0-or-later
@@ -11,10 +11,10 @@ targets:
 includes: auto
 dependencies:
   apm:
-    # chrome-devtools は上流リポジトリ自体がプラグイン形式。プラグイン manifest が
-    # MCP サーバー本体を pin する（この SHA 時点で chrome-devtools-mcp@1.5.0）。
-    # 注意: プラグイン経由の MCP は consumer から見て transitive（depth 2）になるため、
-    #       consumer 側で `apm install --trust-transitive-mcp` が必要。
+    # chrome-devtools は上流リポジトリ自体がプラグイン形式。この apm: 依存は
+    # chrome-devtools の SKILLS を提供する（この SHA 時点で chrome-devtools-mcp@1.5.0 を同梱）。
+    # MCP サーバー本体はプラグイン経由だと consumer から見て transitive（depth 2）になり、
+    # apm 0.24.1 以降は auto-trust されないため、下の mcp: で direct 宣言（depth 1）して trust する。
     - ChromeDevTools/chrome-devtools-mcp#913308263bdc8042af74924b68dc39a374ad071d
   mcp:
     # 直接定義（stdio / remote）。consumer から見て mcp-toolkit は直接依存（depth 1）
@@ -44,3 +44,13 @@ dependencies:
       registry: false
       transport: http
       url: https://mcp.deepwiki.com/mcp
+    # chrome-devtools MCP サーバー本体を direct 宣言（depth-1）。apm 0.24.1 は
+    # プラグイン経由の transitive MCP を auto-trust しなくなったため、ここで直接宣言して
+    # 全 consumer で trust されるようにする（skills は上の apm: プラグインが引き続き提供）。
+    - name: chrome-devtools
+      registry: false
+      transport: stdio
+      command: npx
+      args:
+        - -y
+        - chrome-devtools-mcp@1.5.0
