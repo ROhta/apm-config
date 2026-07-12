@@ -66,11 +66,41 @@ deepwiki は認証不要のホスト型リモート MCP のため追加ランタ
 共通セットの変更は apm-config/mcp-toolkit で行い、本リポジトリで `apm update` を実行する。
 リポジトリ固有サーバーを足す場合は `apm.yml` の `dependencies.mcp` を編集して `apm install` する。
 
-### APM レジストリは使わないこと
+### 登録方式: APM レジストリ優先、担保できない場合のみ self-defined
 
-APM 公式レジストリ (`apm mcp search` / `apm mcp install <registry-name>`) は解決結果が
-不正なケースがある (例: `oraios/serena` が `uvx ide-assistant` という別物に展開される)。
-このため **すべて self-defined (`-- <command> [args...]` 指定)** で登録する (mcp-toolkit 側も同方針)。
+MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-id>`) を優先** して登録する。
+ただし本 toolkit は「版を固定して再現性を担保する」ことを最優先とするため、レジストリ経由で
+次のいずれかに該当し挙動を担保できない場合に限り、**self-defined** にフォールバックする。
+ここで `<registry-id>` はレジストリ項目 ID (例: `io.github.upstash/context7`)、
+`<name>` は self-defined 時に付ける任意のローカル登録名 (例: `context7`) を指す。
+
+- **版を固定できない**: レジストリ項目に固定可能なバージョンが無い (`apm mcp show <registry-id>` の
+  Version が Unknown 等)。本 toolkit は `@latest` を禁じ具体版 / コミット SHA で固定するため、
+  `--mcp-version` で固定できないものは self-defined にする。
+- **解決結果が意図と異なる**: レジストリが別パッケージ・別ソース・別トランスポートに解決する
+  (例: 期待する git コミット固定ではなく PyPI 版になる / streamable-http ではなく SSE になる 等)。
+- **不要な認証・前提を要求する**: レジストリ項目が self-defined では不要な API キー等を要求し、
+  非対話 (CI / エージェント) 実行を妨げる。
+
+self-defined の登録形式はトランスポートで異なる。**stdio** は
+`apm mcp install <name> -- <command> [args...]` (`apm.yml` では `transport: stdio` + `command` / `args`)、
+**リモート (http / sse / streamable-http)** は `apm mcp install <name> --transport <t> --url <url>`
+(`apm.yml` では `transport: <t>` + `url`。例: deepwiki は `transport: http` +
+`url: https://mcp.deepwiki.com/mcp`)。いずれも `apm.yml` では `registry: false` を付ける。
+
+レジストリで登録する場合も `--mcp-version` で必ず版を固定する (固定不可なら上記により self-defined)。
+登録前に `apm mcp show <registry-id>` で「解決先パッケージ・トランスポート・版・要求 env」を確認すること。
+
+#### 現行サーバーの登録方式 (2026-07 時点、apm 0.24.x の `apm mcp show` で検証)
+
+`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` はプラグイン manifest の pin を利用する (レジストリ登録の対象外)。
+
+| サーバー          | 方式          | レジストリを採らない理由 |
+| ----------------- | ------------- | ------------------------ |
+| `context7`        | self-defined  | レジストリ項目 `io.github.upstash/context7` は版が Unknown で固定不可、かつ `CONTEXT7_API_KEY` を要求して非対話実行が中断する。self-defined (`npx -y @upstash/context7-mcp@<ver>`) はキー不要で版固定可。 |
+| `serena`          | self-defined  | レジストリ項目 `oraios/serena` は PyPI 版 (`uvx serena`) に解決し版固定不可。本 toolkit は git コミット SHA (`git+https://github.com/oraios/serena@<sha>`) で byte 単位の再現性を担保する。(かつてレジストリが `uvx ide-assistant` へ誤解決した経緯があるが現在は解消済み。) |
+| `deepwiki`        | self-defined  | レジストリ項目 `cognitionai/deepwiki` は SSE エンドポイント (`/sse`) を返す。本 toolkit は streamable-http (`/mcp`) を使う (Codex アダプタが SSE を受理しないため)。 |
+| `chrome-devtools` | プラグイン経由 | `ChromeDevTools/chrome-devtools-mcp` プラグインの manifest が MCP 本体を pin するため、レジストリ登録の対象外。 |
 
 ## 生成物の場所
 
