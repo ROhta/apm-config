@@ -68,13 +68,14 @@ deepwiki は認証不要のホスト型リモート MCP のため追加ランタ
 
 ### 登録方式: APM レジストリ優先、担保できない場合のみ self-defined
 
-MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-name>`) を優先** して登録する。
+MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-id>`) を優先** して登録する。
 ただし本 toolkit は「版を固定して再現性を担保する」ことを最優先とするため、レジストリ経由で
 次のいずれかに該当し挙動を担保できない場合に限り、**self-defined**
 (`apm mcp install <name> -- <command> [args...]` / `apm.yml` では `registry: false` + `command`/`args`)
-にフォールバックする。
+にフォールバックする。ここで `<registry-id>` はレジストリ項目 ID (例: `io.github.upstash/context7`)、
+`<name>` は self-defined 時に付ける任意のローカル登録名 (例: `context7`) を指す。
 
-- **版を固定できない**: レジストリ項目に固定可能なバージョンが無い (`apm mcp show <name>` の
+- **版を固定できない**: レジストリ項目に固定可能なバージョンが無い (`apm mcp show <registry-id>` の
   Version が Unknown 等)。本 toolkit は `@latest` を禁じ具体版 / コミット SHA で固定するため、
   `--mcp-version` で固定できないものは self-defined にする。
 - **解決結果が意図と異なる**: レジストリが別パッケージ・別ソース・別トランスポートに解決する
@@ -83,11 +84,11 @@ MCP サーバーは **APM 公式レジストリ (`apm mcp install <registry-name
   非対話 (CI / エージェント) 実行を妨げる。
 
 レジストリで登録する場合も `--mcp-version` で必ず版を固定する (固定不可なら上記により self-defined)。
-登録前に `apm mcp show <name>` で「解決先パッケージ・トランスポート・版・要求 env」を確認すること。
+登録前に `apm mcp show <registry-id>` で「解決先パッケージ・トランスポート・版・要求 env」を確認すること。
 
 #### 現行サーバーの登録方式 (2026-07 時点、apm 0.24.x の `apm mcp show` で検証)
 
-いずれもレジストリでは上記の担保要件を満たせなかったため self-defined を維持している。
+`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` はプラグイン manifest の pin を利用する (レジストリ登録の対象外)。
 
 | サーバー          | 方式          | レジストリを採らない理由 |
 | ----------------- | ------------- | ------------------------ |
