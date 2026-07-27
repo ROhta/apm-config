@@ -74,7 +74,7 @@ MCP サーバー本体のバージョンまで固定するため、原則 `depen
 
 | MCP | 定義方法 | 配布先 | pin 範囲 |
 | --- | --- | --- | --- |
-| context7 | `dependencies.mcp`（stdio: `npx -y @upstash/context7-mcp@3.2.0`） | claude / codex / copilot | ✓ 本体まで pin |
+| context7 | `dependencies.mcp`（stdio: `npx -y @upstash/context7-mcp@x.y.z`） | claude / codex / copilot | ✓ 本体まで pin |
 | serena | `dependencies.mcp`（stdio: `uvx --from git+.../serena@<sha>`） | claude / codex / copilot | ✓ 本体まで pin |
 | deepwiki | `dependencies.mcp`（remote http: `https://mcp.deepwiki.com/mcp`） | claude / codex / copilot | ─（ホスト型サービス。pin 対象なし） |
 | chrome-devtools | marketplace プラグイン参照（SHA pin） | claude / codex / copilot | ✓ プラグイン manifest が `chrome-devtools-mcp@x.y.z` を pin |
