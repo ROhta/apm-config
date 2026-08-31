@@ -1,5 +1,5 @@
 name: apm-config-mcp-toolkit
-version: 1.3.2
+version: 1.3.3
 description: 共通開発ツール MCP（context7 / serena / chrome-devtools / deepwiki）の pin を一元管理
 author: ROhta
 license: GPL-3.0-or-later
@@ -12,10 +12,10 @@ includes: auto
 dependencies:
   apm:
     # chrome-devtools は上流リポジトリ自体がプラグイン形式。プラグイン manifest が
-    # MCP サーバー本体を pin する（この SHA 時点で chrome-devtools-mcp@1.6.0）。
+    # MCP サーバー本体を pin する（この SHA 時点で chrome-devtools-mcp@1.8.0）。
     # 注意: プラグイン経由の MCP は consumer から見て transitive（depth 2）になるため、
     #       consumer 側で `apm install --trust-transitive-mcp` が必要。
-    - ChromeDevTools/chrome-devtools-mcp#f621d0052fd241dca76e7f615b20e9d320ba965f
+    - ChromeDevTools/chrome-devtools-mcp#45f187b1e3202c9f32ddba913be5d68751c3caa3
   mcp:
     # 直接定義（stdio / remote）。consumer から見て mcp-toolkit は直接依存（depth 1）
     # なので self-defined でも auto-trust され、これらには --trust-transitive-mcp 不要。
@@ -28,14 +28,14 @@ dependencies:
       command: npx
       args:
         - -y
-        - "@upstash/context7-mcp@3.2.5"
+        - "@upstash/context7-mcp@4.0.4"
     - name: serena
       registry: false
       transport: stdio
       command: uvx
       args:
         - --from
-        - git+https://github.com/oraios/serena@bcac0969fb8685783ea6d0f2642468fcc47e6395
+        - git+https://github.com/oraios/serena@949a27ef1e5fda1a6e7b561e777bcece345c6ffd
         - serena
         - start-mcp-server
     # deepwiki は認証不要のホスト型リモート MCP（streamable-http エンドポイント）。
