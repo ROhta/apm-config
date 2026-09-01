@@ -14,7 +14,7 @@ jobs:
       contents: write       # 更新した pin (apm.yml) をコミットするため
       pull-requests: write  # peter-evans/create-pull-request が PR を作成するため
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1            # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1            # v7.0.1
         with:
           persist-credentials: false   # GITHUB_TOKEN を git config に永続化させない（トークン漏えい面の縮小）
 
@@ -42,7 +42,7 @@ jobs:
         run: ./scripts/apm-pins.sh render-body "$RUNNER_TEMP/apm-before" > "$RUNNER_TEMP/apm-pr-body.md"
 
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1   # create-pull-request v8.1.1
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1   # v8.1.1
         with:
           branch: chore/apm-deps-update
           delete-branch: true
