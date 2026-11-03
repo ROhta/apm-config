@@ -10,9 +10,12 @@ make_mcp(){ cat > "$1" <<'YAML'
 name: apm-config-mcp-toolkit
 version: 1.2.0
 dependencies:
-  apm:
-    - ChromeDevTools/chrome-devtools-mcp#913308263bdc8042af74924b68dc39a374ad071d
   mcp:
+    - name: chrome-devtools
+      command: npx
+      args:
+        - -y
+        - "chrome-devtools-mcp@1.6.0"
     - name: context7
       command: npx
       args:
@@ -27,7 +30,7 @@ dependencies:
         - start-mcp-server
 YAML
 }
-# base/apm.yml の最小 fixture（superpowers の git ref pin のみ）
+# base/apm.yml の最小 fixture
 make_base(){ cat > "$1" <<'YAML'
 name: apm-config-base
 version: 1.4.1
@@ -39,16 +42,15 @@ YAML
 }
 NEWSHA=1111111111111111111111111111111111111111       # serena 用
 SUPERSHA=2222222222222222222222222222222222222222      # superpowers 用
-CHROMESHA=3333333333333333333333333333333333333333     # chrome-devtools 用
 
 # 1. 置換が効く（4 pin すべて: superpowers / chrome-devtools / context7 / serena）
 bf="$TMP/base1.yml"; make_base "$bf"
 f="$TMP/mcp1.yml"; make_mcp "$f"
 if APM_BASE_FILE="$bf" APM_MCP_FILE="$f" \
-   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
+   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_VERSION=7.7.7 \
    APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null; then
   if grep -q "obra/superpowers#$SUPERSHA" "$bf" \
-    && grep -q "chrome-devtools-mcp#$CHROMESHA" "$f" \
+    && grep -q 'chrome-devtools-mcp@7.7.7' "$f" \
     && grep -q '@upstash/context7-mcp@9.9.9' "$f" \
     && grep -q "oraios/serena@$NEWSHA" "$f"; then
     ok "replaces all four pins (superpowers/chrome-devtools/context7/serena)"
@@ -62,7 +64,7 @@ fi
 # 2. 冪等（2回目は差分ゼロ、base/mcp 両方）
 beforeBase="$(cat "$bf")"; beforeMcp="$(cat "$f")"
 if APM_BASE_FILE="$bf" APM_MCP_FILE="$f" \
-   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
+   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_VERSION=7.7.7 \
    APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null; then
   if [ "$beforeBase" = "$(cat "$bf")" ] && [ "$beforeMcp" = "$(cat "$f")" ]; then
     ok "idempotent"
@@ -77,7 +79,7 @@ fi
 bf2="$TMP/base2.yml"; make_base "$bf2"; bb2="$(cat "$bf2")"
 f2="$TMP/mcp2.yml"; make_mcp "$f2"; b2="$(cat "$f2")"
 if APM_BASE_FILE="$bf2" APM_MCP_FILE="$f2" \
-   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
+   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_VERSION=7.7.7 \
    APM_PINS_CONTEXT7_VERSION=8.8.8 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update --dry-run >/dev/null; then
   if [ "$bb2" = "$(cat "$bf2")" ] && [ "$b2" = "$(cat "$f2")" ]; then
     ok "dry-run no write (base+mcp)"
@@ -109,7 +111,7 @@ fi
 # 6. fail-fast: chrome-devtools anchor が mcp fixture で壊れていると非ゼロ
 bf5="$TMP/base5.yml"; make_base "$bf5"
 f5="$TMP/mcp5.yml"; make_mcp "$f5"
-perl -i -pe 's/chrome-devtools-mcp#[0-9a-f]{40}/BROKEN/' "$f5"
+perl -i -pe 's/chrome-devtools-mcp\@1\.6\.0/BROKEN/' "$f5"
 if APM_BASE_FILE="$bf5" APM_MCP_FILE="$f5" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null 2>&1; then
   ng "fail-fast on broken chrome-devtools anchor"
 else
@@ -199,24 +201,24 @@ SH
 chmod +x "$STUBDIR/npm" "$STUBDIR/gh"
 bf9="$TMP/base9.yml"; make_base "$bf9"
 f9="$TMP/mcp9.yml"; make_mcp "$f9"
-if ( PATH="$STUBDIR:$PATH"; unset APM_PINS_CONTEXT7_VERSION APM_PINS_SERENA_SHA APM_PINS_SUPERPOWERS_SHA APM_PINS_CHROME_SHA; APM_BASE_FILE="$bf9" APM_MCP_FILE="$f9" "$SCRIPT" update >/dev/null 2>&1 ); then
+if ( PATH="$STUBDIR:$PATH"; unset APM_PINS_CONTEXT7_VERSION APM_PINS_SERENA_SHA APM_PINS_SUPERPOWERS_SHA APM_PINS_CHROME_VERSION; APM_BASE_FILE="$bf9" APM_MCP_FILE="$f9" "$SCRIPT" update >/dev/null 2>&1 ); then
   ng "fail-fast when resolution is empty (no silent skip)"
 else
   ok "fail-fast when resolution is empty (no silent skip)"
 fi
 
-# 12. render-body: SHA 系 pin (chrome-devtools) が変化した行だけ出て、SHA は 7 桁に短縮される
+# 12. render-body: SHA 系 pin (serena) が変化した行だけ出て、SHA は 7 桁に短縮される
 BD10="$TMP/before10"; mkdir -p "$BD10"
 make_mcp "$BD10/mcp.apm.yml"
 printf 'name: b\nversion: 1.0.0\ndependencies:\n  apm:\n    - obra/superpowers#%s\n' \
   d884ae04edebef577e82ff7c4e143debd0bbec99 > "$BD10/base.apm.yml"
-SHA_OLD=913308263bdc8042af74924b68dc39a374ad071d
+SHA_OLD=acee002dc498e5f4c368eb9d45ab67e480d77832
 SHA_NEW=4444444444444444444444444444444444444444
 curmcp10="$TMP/cur_mcp10.yml"; curbase10="$TMP/cur_base10.yml"
 make_mcp "$curmcp10"; perl -i -pe "s/$SHA_OLD/$SHA_NEW/" "$curmcp10"
 cp "$BD10/base.apm.yml" "$curbase10"
 if out10="$(APM_BASE_FILE="$curbase10" APM_MCP_FILE="$curmcp10" "$SCRIPT" render-body "$BD10")"; then
-  if echo "$out10" | grep -qE '\| chrome-devtools \| `9133082` \| `4444444` \|' \
+  if echo "$out10" | grep -qE '\| serena \| `acee002` \| `4444444` \|' \
     && ! echo "$out10" | grep -q "$SHA_OLD" \
     && ! echo "$out10" | grep -q "$SHA_NEW"; then
     ok "render-body shows changed SHA pin, 7-char shortened"
@@ -237,14 +239,11 @@ else
   ok "fail-fast when context7 anchor matches more than once"
 fi
 
-# 14. fail-fast: context7 が厳密 semver でない値（prerelease 等）に解決されると非ゼロ終了
-#     （2 回目の実行で prerelease サフィックスが複製されるバグの回帰テスト。
-#      不正値は書き込み前に die するべきで、複製が起きること自体がここでは検知不能な
-#      ほど致命的なので、1 回目の update 呼び出しが非ゼロ終了することを確認する）
+# 14. fail-fast: context7 が厳密 semver でない値（prerelease 等）に解決されると書き込み前に非ゼロ終了
 bf12="$TMP/base12.yml"; make_base "$bf12"
 f12="$TMP/mcp12.yml"; make_mcp "$f12"
 if APM_BASE_FILE="$bf12" APM_MCP_FILE="$f12" \
-   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_SHA=$CHROMESHA \
+   APM_PINS_SUPERPOWERS_SHA=$SUPERSHA APM_PINS_CHROME_VERSION=7.7.7 \
    APM_PINS_CONTEXT7_VERSION=3.2.2-beta.1 APM_PINS_SERENA_SHA=$NEWSHA "$SCRIPT" update >/dev/null 2>&1; then
   ng "fail-fast on non-strict-semver context7 version"
 else
@@ -261,9 +260,7 @@ else
   ok "fail-fast on malformed version line (not strict X.Y.Z)"
 fi
 
-# 16. gh 解決の成功系: releases/latest → commits/<tag> の tag→SHA flow を実際に叩く
-#     (superpowers/serena/chrome-devtools は全て gh スタブ経由、tag 種別非依存で解決される
-#     ことを検証する。context7 のみ npm view 経由なので env 注入で isolate する)
+# 16. gh 解決の成功系: releases/latest → commits/<tag> で superpowers / serena を解決する（npm 系は env 注入）
 GHSTUB="$TMP/ghstub"; mkdir -p "$GHSTUB"
 cat > "$GHSTUB/gh" <<'SH'
 #!/usr/bin/env bash
@@ -272,10 +269,8 @@ path="$2"
 case "$path" in
   repos/obra/superpowers/releases/latest) echo "v9.9.9" ;;
   repos/oraios/serena/releases/latest) echo "v9.9.9" ;;
-  repos/ChromeDevTools/chrome-devtools-mcp/releases/latest) echo "chrome-devtools-mcp-v9.9.9" ;;
   repos/obra/superpowers/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
   repos/oraios/serena/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
-  repos/ChromeDevTools/chrome-devtools-mcp/commits/*) echo "abcdef0123456789abcdef0123456789abcdef01" ;;
   *) exit 1 ;;
 esac
 SH
@@ -283,17 +278,13 @@ chmod +x "$GHSTUB/gh"
 GHSHA=abcdef0123456789abcdef0123456789abcdef01
 bf14="$TMP/base14.yml"; make_base "$bf14"
 f14="$TMP/mcp14.yml"; make_mcp "$f14"
-# chrome-devtools のバージョンを書き添えた人間向けコメント（best-effort 同期の対象）を追加
-printf '\n  # see also chrome-devtools-mcp@0.7.2 release notes\n' >> "$f14"
-if ( PATH="$GHSTUB:$PATH"; unset APM_PINS_SUPERPOWERS_SHA APM_PINS_CHROME_SHA APM_PINS_SERENA_SHA
-     APM_BASE_FILE="$bf14" APM_MCP_FILE="$f14" APM_PINS_CONTEXT7_VERSION=9.9.9 "$SCRIPT" update >/dev/null ); then
+if ( PATH="$GHSTUB:$PATH"; unset APM_PINS_SUPERPOWERS_SHA APM_PINS_SERENA_SHA
+     APM_BASE_FILE="$bf14" APM_MCP_FILE="$f14" APM_PINS_CONTEXT7_VERSION=9.9.9 APM_PINS_CHROME_VERSION=9.9.9 "$SCRIPT" update >/dev/null ); then
   if grep -q "obra/superpowers#$GHSHA" "$bf14" \
-    && grep -q "chrome-devtools-mcp#$GHSHA" "$f14" \
-    && grep -q "oraios/serena@$GHSHA" "$f14" \
-    && grep -q 'chrome-devtools-mcp@9.9.9' "$f14"; then
-    ok "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
+    && grep -q "oraios/serena@$GHSHA" "$f14"; then
+    ok "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/serena"
   else
-    ng "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
+    ng "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/serena"
   fi
 else
   ng "gh-stubbed update command failed unexpectedly (test 16 setup)"

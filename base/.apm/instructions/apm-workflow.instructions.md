@@ -29,7 +29,7 @@ APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:m
 | `CLAUDE.md` / `AGENTS.md` (各所) | `apm compile` で生成 | ❌ 追跡しない |
 | `apm.lock.yaml` | `apm install` で生成 (整合性検証・オーファン検出・厳密な再現性のため例外的に追跡) | ✅ 追跡する |
 | `.mcp.json` | `apm install` で生成 (Claude Code MCP 設定) | ❌ 追跡しない |
-| `.vscode/mcp.json` | `apm install` で生成 (GitHub Copilot in VS Code MCP 設定) | ❌ 追跡しない |
+| `.github/mcp.json` | `apm install` で生成 (GitHub Copilot CLI MCP 設定。VS Code 向け `.vscode/mcp.json` は apm 0.29 以降生成されない) | ❌ 追跡しない |
 | `.codex/config.toml` | `apm install` で生成 (Codex CLI MCP 設定) | ❌ 追跡しない |
 | `apm_modules/`, `.agents/skills/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `.claude/settings.json`, `.claude/apm-hooks.json`, `.github/prompts/`, `.github/hooks/` | `apm install` で生成 (APM プラグイン展開先) | ❌ 追跡しない |
 
@@ -40,11 +40,9 @@ APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:m
 `.apm/instructions/` または `apm.yml` を編集後、ローカルで以下を実行することで生成物が更新される (任意)。
 
 ```bash
-apm install   # 全プリミティブを再デプロイ (.github/instructions/, .claude/rules/, .mcp.json, .vscode/mcp.json, .codex/config.toml) + apm.lock.yaml 更新
+apm install   # 全プリミティブを再デプロイ (.github/instructions/, .claude/rules/, .mcp.json, .github/mcp.json, .codex/config.toml) + apm.lock.yaml 更新
 apm compile   # CLAUDE.md / AGENTS.md を更新
 ```
-
-mcp-toolkit を参照する (chrome-devtools を含む) リポジトリでは、transitive MCP を信頼するため `apm install --trust-transitive-mcp` を使う (詳細は mcp-servers ルール)。
 
 生成物のうち `apm.lock.yaml` と `.github/instructions/{pr-review,language}.instructions.md` (クラウド Copilot 経路確保のための base 由来例外) は追跡対象としてコミットする。それ以外の生成物 (`.github/instructions/` の他ファイル・`CLAUDE.md` / `AGENTS.md` / `.claude/rules/` など) は `.gitignore` 対象のためコミットには含まれない。
 

@@ -10,7 +10,7 @@ applyTo: "apm.yml"
 共通の MCP サーバーセット (context7 / serena / chrome-devtools / deepwiki) は、共有パッケージ
 [`ROhta/apm-config/mcp-toolkit`](https://github.com/ROhta/apm-config) が Source of Truth。
 本リポジトリは `apm.yml` の `dependencies.apm` からこれを参照する。`apm install` を実行すると、
-mcp-toolkit に宣言された MCP サーバーが Claude Code / Codex CLI / GitHub Copilot (in VS Code) の
+mcp-toolkit に宣言された MCP サーバーが Claude Code / Codex CLI / GitHub Copilot (CLI) の
 各 IDE 設定に展開される。
 
 リポジトリ固有の MCP サーバーが必要な場合のみ、`apm.yml` の `dependencies.mcp` に個別に追記する。
@@ -22,28 +22,16 @@ mcp-toolkit に宣言された MCP サーバーが Claude Code / Codex CLI / Git
 | `context7`        | ライブラリ公式ドキュメントの最新版を取得                 | `node` (`npx`)                         | 直接依存 (auto-trust) |
 | `serena`          | LSP ベースのシンボル指向コード探索・編集                 | `uv` (`uvx`)                           | 直接依存 (auto-trust) |
 | `deepwiki`        | GitHub リポジトリの AI ドキュメント (リモート streamable-http) | なし (ホスト型)                    | 直接依存 (auto-trust) |
-| `chrome-devtools` | Chrome DevTools 経由のブラウザ自動化・パフォーマンス計測 | `node` (Chrome は実行時にダウンロード) | **transitive (要 `--trust-transitive-mcp`)** |
+| `chrome-devtools` | Chrome DevTools 経由のブラウザ自動化・パフォーマンス計測 | `node` (Chrome は実行時にダウンロード) | 直接依存 (auto-trust) |
 
 ## trust の粒度
 
-`dependencies.mcp` で直接定義した context7 / serena / deepwiki は consumer から見て
-直接依存 (depth 1) なので self-defined でも auto-trust され、フラグなしで展開される。
-`chrome-devtools` だけはプラグイン参照 (`ChromeDevTools/chrome-devtools-mcp`) 経由の
-transitive MCP (depth 2) のため、consumer 側で `apm install --trust-transitive-mcp` が必要。
-フラグは全 MCP に一括でかかり、`apm.yml` / `apm.lock.yaml` には永続化されないため、
-ラッパースクリプト (Makefile 等) で標準化することを推奨する。
+全サーバーを `dependencies.mcp` に直接定義しており、consumer から見て直接依存 (depth 1) なので
+self-defined でも auto-trust される。`--trust-transitive-mcp` は不要 (付けても無害)。
 
-### chrome-devtools の初回導入時の挙動
-
-新規 consumer で `apm install --trust-transitive-mcp` を実行すると、**1 回目はプラグイン
-`chrome-devtools-mcp` の解決のみで、`.mcp.json` 等への設定は 2 回目の実行で確定する**ことがある
-（transitive プラグインの解決とサーバー設定が別パスのため）。導入時は
-`apm install --trust-transitive-mcp` を 2 回実行し、`.mcp.json` に chrome-devtools を含む
-4 サーバーが揃うことを確認する。上記ラッパースクリプトで 2 回実行を含めておくと確実。
-
-なお chrome-devtools のコマンドは上流プラグインの manifest が定義する (`npx chrome-devtools-mcp@<pin>`、
-`-y` 無し) ため、初回 `npx` 実行時にインストール確認プロンプトが出うる。CI/エージェント実行では
-`npx` が非対話で進むよう環境を整えるか、事前に一度手動実行しておく。
+`chrome-devtools` は上流のプラグイン (`ChromeDevTools/chrome-devtools-mcp`) を参照せず、MCP だけを定義する。
+上流が Agent Plugins 形式になり、apm 0.35 はその MCP を Claude Code / Codex CLI に展開しないため。
+上流プラグイン同梱のスキル (chrome-devtools / debug-optimize-lcp 等) は配布しない。
 
 ## バージョン固定方針
 
@@ -93,14 +81,14 @@ self-defined の登録形式はトランスポートで異なる。**stdio** は
 
 #### 現行サーバーの登録方式 (2026-07 時点、apm 0.24.x の `apm mcp show` で検証)
 
-`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` はプラグイン manifest の pin を利用する (レジストリ登録の対象外)。
+`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` も self-defined で直接定義する。
 
 | サーバー          | 方式          | レジストリを採らない理由 |
 | ----------------- | ------------- | ------------------------ |
 | `context7`        | self-defined  | レジストリ項目 `io.github.upstash/context7` は版が Unknown で固定不可、かつ `CONTEXT7_API_KEY` を要求して非対話実行が中断する。self-defined (`npx -y @upstash/context7-mcp@<ver>`) はキー不要で版固定可。 |
 | `serena`          | self-defined  | レジストリ項目 `oraios/serena` は PyPI 版 (`uvx serena`) に解決し版固定不可。本 toolkit は git コミット SHA (`git+https://github.com/oraios/serena@<sha>`) で byte 単位の再現性を担保する。(かつてレジストリが `uvx ide-assistant` へ誤解決した経緯があるが現在は解消済み。) |
 | `deepwiki`        | self-defined  | レジストリ項目 `cognitionai/deepwiki` は SSE エンドポイント (`/sse`) を返す。本 toolkit は streamable-http (`/mcp`) を使う (Codex アダプタが SSE を受理しないため)。 |
-| `chrome-devtools` | プラグイン経由 | `ChromeDevTools/chrome-devtools-mcp` プラグインの manifest が MCP 本体を pin するため、レジストリ登録の対象外。 |
+| `chrome-devtools` | self-defined  | npm の `chrome-devtools-mcp@<ver>` で版固定する (`npx -y`)。上流プラグイン経由は apm 0.35 が Claude / Codex に展開しない。 |
 
 ## 生成物の場所
 
@@ -109,5 +97,5 @@ self-defined の登録形式はトランスポートで異なる。**stdio** は
 | パス                 | 対応 IDE                    |
 | -------------------- | --------------------------- |
 | `.mcp.json`          | Claude Code (project scope) |
-| `.vscode/mcp.json`   | GitHub Copilot in VS Code   |
+| `.github/mcp.json`   | GitHub Copilot (CLI)。apm 0.29 以降 `.vscode/mcp.json` (VS Code) は生成されない |
 | `.codex/config.toml` | Codex CLI                   |

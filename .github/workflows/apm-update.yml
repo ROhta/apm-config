@@ -24,10 +24,7 @@ jobs:
           cp base/apm.yml "$RUNNER_TEMP/apm-before/base.apm.yml"
           cp mcp-toolkit/apm.yml "$RUNNER_TEMP/apm-before/mcp.apm.yml"
 
-      # apm-action(update:true) は annotated tag 前提のため、lightweight tag で
-      # release する chrome-devtools-mcp で "No annotated tag found" と失敗する。
-      # 4 pin（superpowers / chrome-devtools / context7 / serena）すべてを
-      # tag 種別非依存の独自スクリプトで解決・更新する（lockfile は生成しない）。
+      # 全 pin を tag 種別非依存の独自スクリプトで解決・更新する（lockfile は生成しない）
       - name: Update apm dependency pins (superpowers / chrome-devtools / context7 / serena)
         env:
           GH_TOKEN: ${{ github.token }}
