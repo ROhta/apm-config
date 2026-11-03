@@ -29,7 +29,7 @@ APM CLI 本体 (`apm` バイナリ) のバージョンは `mise.toml` (`github:m
 | `CLAUDE.md` / `AGENTS.md` (各所) | `apm compile` で生成 | ❌ 追跡しない |
 | `apm.lock.yaml` | `apm install` で生成 (整合性検証・オーファン検出・厳密な再現性のため例外的に追跡) | ✅ 追跡する |
 | `.mcp.json` | `apm install` で生成 (Claude Code MCP 設定) | ❌ 追跡しない |
-| `.github/mcp.json` / `.github/copilot/` | `apm install` で生成 (GitHub Copilot CLI の MCP 設定 / ネイティブ Agent Plugin 登録)。apm 0.29 以降、`copilot` target では `.vscode/mcp.json` (VS Code) は生成されない | ❌ 追跡しない |
+| `.github/mcp.json` / `.github/copilot/` | `apm install` で生成 (GitHub Copilot CLI の MCP 設定 / プラグイン登録。VS Code 向け `.vscode/mcp.json` は apm 0.29 以降生成されない) | ❌ 追跡しない |
 | `.codex/config.toml` | `apm install` で生成 (Codex CLI MCP 設定) | ❌ 追跡しない |
 | `apm_modules/`, `.agents/skills/`, `.claude/skills/`, `.claude/commands/`, `.claude/hooks/`, `.claude/settings.json`, `.claude/apm-hooks.json`, `.github/prompts/`, `.github/hooks/` | `apm install` で生成 (APM プラグイン展開先) | ❌ 追跡しない |
 
