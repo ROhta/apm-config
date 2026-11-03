@@ -77,7 +77,7 @@ MCP サーバー本体のバージョンまで固定するため、原則 `depen
 | context7 | `dependencies.mcp`（stdio: `npx -y @upstash/context7-mcp@x.y.z`） | claude / codex / copilot | ✓ 本体まで pin |
 | serena | `dependencies.mcp`（stdio: `uvx --from git+.../serena@<sha>`） | claude / codex / copilot | ✓ 本体まで pin |
 | deepwiki | `dependencies.mcp`（remote http: `https://mcp.deepwiki.com/mcp`） | claude / codex / copilot | ─（ホスト型サービス。pin 対象なし） |
-| chrome-devtools | marketplace プラグイン参照（SHA pin） | claude / codex / copilot | ✓ プラグイン manifest が `chrome-devtools-mcp@x.y.z` を pin |
+| chrome-devtools | `dependencies.mcp`（stdio: `npx -y chrome-devtools-mcp@x.y.z`）＋ プラグイン参照（SHA pin、版の追従元） | claude / codex / copilot | ✓ 本体まで pin（版はプラグイン SHA の tag に合わせる） |
 
 補足:
 
@@ -87,6 +87,8 @@ MCP サーバー本体のバージョンまで固定するため、原則 `depen
   リポジトリは、各自 Claude ネイティブプラグインとして個別導入する。
 - **deepwiki は streamable-http（`/mcp`）を使う。** SSE ではないため codex にも
   書き込まれる（APM の codex アダプタは SSE リモートのみ拒否する）。
-- chrome-devtools を `dependencies.mcp` の直接定義（`npx -y chrome-devtools-mcp@x.y.z`）に
-  切り替えれば depth 1 化して `--trust-transitive-mcp` が不要になるが、本 PR では
-  上流プラグインの pin 追従を優先してプラグイン参照を維持している。
+- chrome-devtools の上流は Agent Plugins v1 形式に移行しており、apm 0.35 は Agent Plugin の
+  MCP を GitHub Copilot のネイティブ登録にしか使わず、Claude / Codex には展開しない。
+  そのため MCP 本体は `dependencies.mcp` に直接定義（depth 1、auto-trust）し、プラグイン参照は
+  SHA pin の追従元として残している。版数は `scripts/apm-pins.sh` の
+  `chrome-devtools-mcp@X.Y.Z` 同期（best-effort）がプラグイン SHA と一緒に書き換える。

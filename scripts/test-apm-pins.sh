@@ -285,12 +285,15 @@ bf14="$TMP/base14.yml"; make_base "$bf14"
 f14="$TMP/mcp14.yml"; make_mcp "$f14"
 # chrome-devtools のバージョンを書き添えた人間向けコメント（best-effort 同期の対象）を追加
 printf '\n  # see also chrome-devtools-mcp@0.7.2 release notes\n' >> "$f14"
+# dependencies.mcp の直接定義（args の版）も同じ同期で追従すること
+printf '        - "chrome-devtools-mcp@0.7.2"\n' >> "$f14"
 if ( PATH="$GHSTUB:$PATH"; unset APM_PINS_SUPERPOWERS_SHA APM_PINS_CHROME_SHA APM_PINS_SERENA_SHA
      APM_BASE_FILE="$bf14" APM_MCP_FILE="$f14" APM_PINS_CONTEXT7_VERSION=9.9.9 "$SCRIPT" update >/dev/null ); then
   if grep -q "obra/superpowers#$GHSHA" "$bf14" \
     && grep -q "chrome-devtools-mcp#$GHSHA" "$f14" \
     && grep -q "oraios/serena@$GHSHA" "$f14" \
-    && grep -q 'chrome-devtools-mcp@9.9.9' "$f14"; then
+    && grep -q 'chrome-devtools-mcp@9.9.9' "$f14" \
+    && ! grep -q 'chrome-devtools-mcp@0.7.2' "$f14"; then
     ok "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
   else
     ng "gh tag->sha resolution (releases/latest + commits/<tag>) resolves superpowers/chrome-devtools/serena and syncs chrome version comment"
