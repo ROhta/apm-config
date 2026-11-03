@@ -26,29 +26,12 @@ mcp-toolkit に宣言された MCP サーバーが Claude Code / Codex CLI / Git
 
 ## trust の粒度
 
-`dependencies.mcp` で直接定義した context7 / serena / deepwiki / chrome-devtools は consumer から見て
-直接依存 (depth 1) なので self-defined でも auto-trust され、フラグなしで展開される。
+全サーバーを `dependencies.mcp` に直接定義しており、consumer から見て直接依存 (depth 1) なので
+self-defined でも auto-trust される。`--trust-transitive-mcp` は不要 (付けても無害)。
 
-`chrome-devtools` は従来プラグイン参照 (`ChromeDevTools/chrome-devtools-mcp`) 経由の
-transitive MCP (depth 2) だった。しかし上流が Agent Plugins v1 形式 (`plugin.json` の `$schema` が
-agent-plugins.org) に移行し、apm 0.35 は Agent Plugin の MCP を GitHub Copilot のネイティブ
-プラグイン登録 (`.github/copilot/settings.local.json`) にしか使わず、Claude Code / Codex CLI には
-展開しない。そのため MCP サーバー本体はプラグインと同じ版で `dependencies.mcp` に直接定義している。
-プラグイン参照自体は SHA pin の追従元として残している。consumer が従来どおり
-`apm install --trust-transitive-mcp` を使っていても問題ない (フラグは全 MCP に一括でかかり、
-`apm.yml` / `apm.lock.yaml` には永続化されない)。
-
-### chrome-devtools の初回導入時の挙動
-
-新規 consumer で `apm install --trust-transitive-mcp` を実行すると、**1 回目はプラグイン
-`chrome-devtools-mcp` の解決のみで、`.mcp.json` 等への設定は 2 回目の実行で確定する**ことがある
-（transitive プラグインの解決とサーバー設定が別パスのため）。導入時は
-`apm install --trust-transitive-mcp` を 2 回実行し、`.mcp.json` に chrome-devtools を含む
-4 サーバーが揃うことを確認する。上記ラッパースクリプトで 2 回実行を含めておくと確実。
-
-なお chrome-devtools の MCP コマンドは直接定義 (`npx -y chrome-devtools-mcp@<ver>`) のため、
-context7 と同じく `npx` のインストール確認プロンプトは出ない。GitHub Copilot ではプラグインの
-ネイティブ登録 (`chrome-devtools@apm`) と `.github/mcp.json` の直接定義が併存する。
+`chrome-devtools` は上流のプラグイン (`ChromeDevTools/chrome-devtools-mcp`) を参照せず、MCP だけを定義する。
+上流が Agent Plugins 形式になり、apm 0.35 はその MCP を Claude Code / Codex CLI に展開しないため。
+上流プラグイン同梱のスキル (chrome-devtools / debug-optimize-lcp 等) は配布しない。
 
 ## バージョン固定方針
 
@@ -98,14 +81,14 @@ self-defined の登録形式はトランスポートで異なる。**stdio** は
 
 #### 現行サーバーの登録方式 (2026-07 時点、apm 0.24.x の `apm mcp show` で検証)
 
-`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` はプラグイン manifest の pin と同じ版を self-defined で直接定義する (レジストリ登録の対象外)。
+`context7` / `serena` / `deepwiki` はレジストリでは上記の担保要件を満たせないため self-defined を維持し、`chrome-devtools` も self-defined で直接定義する。
 
 | サーバー          | 方式          | レジストリを採らない理由 |
 | ----------------- | ------------- | ------------------------ |
 | `context7`        | self-defined  | レジストリ項目 `io.github.upstash/context7` は版が Unknown で固定不可、かつ `CONTEXT7_API_KEY` を要求して非対話実行が中断する。self-defined (`npx -y @upstash/context7-mcp@<ver>`) はキー不要で版固定可。 |
 | `serena`          | self-defined  | レジストリ項目 `oraios/serena` は PyPI 版 (`uvx serena`) に解決し版固定不可。本 toolkit は git コミット SHA (`git+https://github.com/oraios/serena@<sha>`) で byte 単位の再現性を担保する。(かつてレジストリが `uvx ide-assistant` へ誤解決した経緯があるが現在は解消済み。) |
 | `deepwiki`        | self-defined  | レジストリ項目 `cognitionai/deepwiki` は SSE エンドポイント (`/sse`) を返す。本 toolkit は streamable-http (`/mcp`) を使う (Codex アダプタが SSE を受理しないため)。 |
-| `chrome-devtools` | self-defined (版はプラグイン pin に追従) | `ChromeDevTools/chrome-devtools-mcp` プラグインの manifest が MCP 本体を pin するため、版はそれに合わせる。apm 0.35 は Agent Plugin 形式の MCP を Claude / Codex に展開しないため直接定義する。レジストリ登録の対象外。 |
+| `chrome-devtools` | self-defined  | npm の `chrome-devtools-mcp@<ver>` で版固定する (`npx -y`)。上流プラグイン経由は apm 0.35 が Claude / Codex に展開しない。 |
 
 ## 生成物の場所
 
@@ -114,6 +97,5 @@ self-defined の登録形式はトランスポートで異なる。**stdio** は
 | パス                 | 対応 IDE                    |
 | -------------------- | --------------------------- |
 | `.mcp.json`          | Claude Code (project scope) |
-| `.github/mcp.json`   | GitHub Copilot (CLI)。apm 0.29 以降、`copilot` target では `.vscode/mcp.json` (VS Code) は生成されない |
-| `.github/copilot/`   | GitHub Copilot のネイティブ Agent Plugin 登録 |
+| `.github/mcp.json`   | GitHub Copilot (CLI)。apm 0.29 以降 `.vscode/mcp.json` (VS Code) は生成されない |
 | `.codex/config.toml` | Codex CLI                   |

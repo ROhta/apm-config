@@ -44,8 +44,6 @@ apm install   # 全プリミティブを再デプロイ (.github/instructions/, 
 apm compile   # CLAUDE.md / AGENTS.md を更新
 ```
 
-mcp-toolkit を参照する (chrome-devtools を含む) リポジトリでは、transitive MCP を信頼するため `apm install --trust-transitive-mcp` を使う (詳細は mcp-servers ルール)。
-
 生成物のうち `apm.lock.yaml` と `.github/instructions/{pr-review,language}.instructions.md` (クラウド Copilot 経路確保のための base 由来例外) は追跡対象としてコミットする。それ以外の生成物 (`.github/instructions/` の他ファイル・`CLAUDE.md` / `AGENTS.md` / `.claude/rules/` など) は `.gitignore` 対象のためコミットには含まれない。
 
 MCP サーバーの追加・運用手順は mcp-servers ルールを、APM プラグイン (Skills / commands 等) の追加・運用手順は apm-plugins ルールを参照。

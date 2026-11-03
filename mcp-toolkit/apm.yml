@@ -10,17 +10,9 @@ targets:
   - copilot
 includes: auto
 dependencies:
-  apm:
-    # chrome-devtools は上流リポジトリ自体がプラグイン形式（この SHA 時点で chrome-devtools-mcp@1.12.0）。
-    # プラグイン参照はスキル（chrome-devtools / debug-optimize-lcp 等）の配布と SHA pin 追従のために残す。
-    # 注意: この SHA 以降の上流は Agent Plugins v1 形式（plugin.json の $schema が agent-plugins.org）で、
-    #       apm 0.35 は Agent Plugin の MCP を Copilot のネイティブ登録にしか使わず、Claude / Codex には
-    #       展開しない。そのため MCP サーバー本体は下の dependencies.mcp に直接定義する。
-    - ChromeDevTools/chrome-devtools-mcp#af2834411a564d366f9cab63efb046d9084f4dba
   mcp:
-    # chrome-devtools: 上記プラグインと同じ版を直接定義する（apm 0.35 で Claude / Codex に届けるため）。
-    # 版数はプラグイン SHA の release tag と一致させる。scripts/apm-pins.sh の
-    # chrome-devtools-mcp@X.Y.Z 同期（best-effort）が上のコメントと一緒に書き換える。
+    # すべて self-defined の直接定義（depth 1 で auto-trust）。版は scripts/apm-pins.sh が追従する。
+    # chrome-devtools: 上流プラグインは Agent Plugins 形式で apm 0.35 が Claude / Codex に展開しないため MCP のみ定義
     - name: chrome-devtools
       registry: false
       transport: stdio
@@ -28,11 +20,6 @@ dependencies:
       args:
         - -y
         - "chrome-devtools-mcp@1.12.0"
-    # 直接定義（stdio / remote）。consumer から見て mcp-toolkit は直接依存（depth 1）
-    # なので self-defined でも auto-trust され、これらには --trust-transitive-mcp 不要。
-    #
-    # context7 / serena は npx・uvx で MCP サーバー本体のバージョンまで pin。
-    # コマンド直書きなので claude / codex / copilot いずれにも可搬。
     - name: context7
       registry: false
       transport: stdio
@@ -49,8 +36,7 @@ dependencies:
         - git+https://github.com/oraios/serena@5e4f5cd173c7ff3eed37ee3f1de6c266b937c5dc
         - serena
         - start-mcp-server
-    # deepwiki は認証不要のホスト型リモート MCP（streamable-http エンドポイント）。
-    # SSE ではないため codex アダプタも受理し、claude / codex / copilot 全てに配布される。
+    # streamable-http（SSE は codex アダプタが受理しない）
     - name: deepwiki
       registry: false
       transport: http
