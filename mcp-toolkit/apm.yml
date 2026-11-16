@@ -1,5 +1,5 @@
 name: apm-config-mcp-toolkit
-version: 1.4.1
+version: 1.4.2
 description: 共通開発ツール MCP（context7 / serena / chrome-devtools / deepwiki）の pin を一元管理
 author: ROhta
 license: GPL-3.0-or-later
@@ -19,14 +19,14 @@ dependencies:
       command: npx
       args:
         - -y
-        - "chrome-devtools-mcp@1.12.0"
+        - "chrome-devtools-mcp@1.13.0"
     - name: context7
       registry: false
       transport: stdio
       command: npx
       args:
         - -y
-        - "@upstash/context7-mcp@4.5.1"
+        - "@upstash/context7-mcp@4.7.0"
     - name: serena
       registry: false
       transport: stdio
